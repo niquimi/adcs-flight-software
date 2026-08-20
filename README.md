@@ -75,6 +75,30 @@ Onboard chain (truth vectors in the SIL packet are logs only):
 - TRIAD (sun + mag) seeds / corrects a complementary `C_BN` filter; bias `b̂` is estimated in sunlight and frozen in eclipse
 - PD on attitude error + bias-corrected rate; RW mapper saturates and applies the reaction-torque sign
 
+## Verification (SIL vs Basilisk truth)
+
+The sensor packet carries **verification fields** (`sigma_BN`, `r_BN`, `sun_N`, `B_N`, …) that the onboard estimator must **not** use. They exist only so `sensor_receiver.exe` can compare the FSW state to Basilisk truth every 5 s (`printEstCompare` in `flight_software.cpp`).
+
+```text
+Est t=... |dr|=... m  SunN=... MagN=...  SunB=... MagB=...
+          TRIAD=... Att=... |b|=... deg/h  NadirN=... NadirB=...
+```
+
+| Metric | Meaning | Typical demo (`detumble_to_pointing`, sunlight) |
+|---|---|---|
+| **Att** | Geodesic angle between filtered `C_BN` and truth DCM | **&lt; 0.5°** after filter settle |
+| **NadirB** | Nadir direction in body vs truth (Pointing nadir) | **&lt; 0.2°** when `Mode=Pointing` |
+| **\|b\|** | Estimated gyro bias norm | Converges to **~36 deg/h** (planted IMU bias 0.01 °/s) |
+| **SunB / MagB** | CSS / TAM body vectors vs truth | **&lt; 1°** in sun (MagB noisier from TAM) |
+| **\|dr\|** | Kepler `r_BN` vs sim truth | **~1–2 m** (two-body demo orbit) |
+| **‖ω‖** | Body rate from gyro − `b̂` | Detumble **&gt; 0.015 → &lt; 0.005 rad/s** before Pointing |
+
+**Control:** after boot Standby (60 s in the default demo), expect **Standby → Detumble → Pointing** on the `Mode=` console line and Vizard FSW-mode bar. Pointing does not re-enter Detumble on rate alone — only **Standby** and **Safe** (on exit) use the 0.015 rad/s tumble threshold.
+
+**Estimation:** in eclipse, `css_valid` drops but `nadir_valid` can remain (filter coasts on gyro); attitude error should not step-change solely because the sun sensors are dark (`eclipse_coast.py`).
+
+Offline sensor plots (no Vizard): run with `log_sensors=True`, `show_plots=True`, `real_time=False` — see [BasiliskSim/README.md](BasiliskSim/README.md#offline-run-vizard-bin-no-sil).
+
 ## Exercising the FSW
 
 Basilisk is the LEO SSO plant (sensors, wheels, eclipse, demo battery). SIL is only the link: 108-byte sensors in, 32-byte commands out (RW, optional MTB, and `ModeId` every cycle).
@@ -136,7 +160,7 @@ BasiliskSim/        Dynamics environment (plant, SOC, Vizard)
 - Detumble on reaction wheels only; magnetorquers are in the plant but unused.
 - Pointing is two-axis (no yaw / ground-track constraint).
 - Orbit / sun / mag models match this scenario, not GPS/TLE or full-order IGRF.
-- No unit tests; SIL can print estimator-vs-truth residuals.
+- No automated CSV or unit tests; verification is console `Est` lines and optional offline plots (see [Verification](#verification-sil-vs-basilisk-truth)).
 
 ## License
 
