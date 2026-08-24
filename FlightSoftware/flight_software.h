@@ -8,6 +8,7 @@
 #include "modes/standby_mode.h"
 #include "modes/safe_mode.h"
 #include "modes/pointing_mode.h"
+#include "mode_director.h"
 
 /**
  * Flight Software orchestrator — single entry point from the SIL loop.
@@ -25,10 +26,10 @@ public:
     /** Hold Standby until timestamp_s reaches this (launcher separation). 0 = off. */
     void setBootStandbyDuration(float duration_s);
 
-    float kSafeModeBatteryThreshold = 0.25f;
 
 private:
     StateEstimator state_estimator_;
+    ModeDirector director_;
 
     DetumbleMode detumble_;
     StandbyMode standby_;
@@ -37,7 +38,6 @@ private:
 
     OperationMode* active_ = nullptr;
 
-    ModeId selectNextMode(const SpacecraftState& state) const;
     bool referenceValid(const SpacecraftState& state) const;
     void modeFor(ModeId id);
     void printModeChange(ModeId id, float timestamp_s) const;

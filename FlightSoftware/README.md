@@ -18,7 +18,7 @@ Modes never pick the next mode. `AttitudeCommand.active_mode` is what flew this 
 
 ## Mode director
 
-Implemented in `selectNextMode` (`flight_software.cpp`). Thresholds live on the mode classes (`kEnterDetumbleRateRadps`, `kExitRateRadps`, `kExitHold_s`, `kExitBatteryPercentage`). Optional `bootStandbyDuration_s` (SIL `PACKET_BOOT_CONFIG`) holds Standby until that sim time — 60 s in the default demo, 0 in the FSW test scenarios.
+Implemented in `selectNextMode` (`mode_director.cpp`). Thresholds live on the mode classes (`kEnterDetumbleRateRadps`, `kExitRateRadps`, `kExitHold_s`, `kExitBatteryPercentage`). Optional `bootStandbyDuration_s` (SIL `PACKET_BOOT_CONFIG`) holds Standby until that sim time — 60 s in the default demo, 0 in the FSW test scenarios.
 
 ```mermaid
 stateDiagram-v2

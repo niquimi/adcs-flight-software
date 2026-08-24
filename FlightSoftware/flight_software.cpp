@@ -37,7 +37,16 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
         bootHoldLogged_ = true;
     }
 
-    const ModeId next = selectNextMode(state);
+    ModeDirector::Input in;
+    in.current = active_->id();
+    in.timestamp_s = state.timestamp_s;
+    in.boot_standby_duration_s = bootStandbyDuration_s_;
+    in.battery_level = state.batteryLevel;
+    in.rate_radps = math::vec3_norm(state.omega_radps);
+    in.ref_ok = referenceValid(state);
+    in.rates_settled = detumble_.ratesSettled();
+
+    const ModeId next = director_.selectNextMode(in);
     if (next != active_->id()) {
         active_->exit();
         modeFor(next);
@@ -58,52 +67,6 @@ bool FlightSoftware::referenceValid(const SpacecraftState& state) const {
             return state.nadir_valid;
     }
     return false;
-}
-
-ModeId FlightSoftware::selectNextMode(const SpacecraftState& state) const {
-    if (state.timestamp_s < bootStandbyDuration_s_) {
-        return ModeId::Standby;
-    }
-
-    if (state.batteryLevel < kSafeModeBatteryThreshold) {
-        return ModeId::Safe;
-    }
-
-    const float rate = math::vec3_norm(state.omega_radps);
-    const bool ref_ok = referenceValid(state);
-
-    switch (active_->id()) {
-        case ModeId::Standby:
-            if (rate > StandbyMode::kEnterDetumbleRateRadps) {
-                return ModeId::Detumble;
-            }
-            if (rate < DetumbleMode::kExitRateRadps && ref_ok) {
-                return ModeId::Pointing;
-            }
-            return ModeId::Standby;
-
-        case ModeId::Detumble:
-            if (!detumble_.ratesSettled()) {
-                return ModeId::Detumble;
-            }
-            return ref_ok ? ModeId::Pointing : ModeId::Standby;
-
-        case ModeId::Pointing:
-            if (!ref_ok) {
-                return ModeId::Standby;
-            }
-            return ModeId::Pointing;
-
-        case ModeId::Safe:
-            if (state.batteryLevel > SafeMode::kExitBatteryPercentage) {
-                return (rate > StandbyMode::kEnterDetumbleRateRadps)
-                    ? ModeId::Detumble
-                    : ModeId::Standby;
-            }
-            return ModeId::Safe;
-    }
-
-    return active_->id();
 }
 
 void FlightSoftware::modeFor(ModeId id) {

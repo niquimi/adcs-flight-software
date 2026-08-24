@@ -13,6 +13,7 @@ add_executable(
     command_sender.cpp
     boot_config_receiver.cpp
     ${FSW_ROOT}/flight_software.cpp
+    ${FSW_ROOT}/mode_director.cpp
     ${FSW_ROOT}/modes/detumble_mode.cpp
     ${FSW_ROOT}/modes/standby_mode.cpp
     ${FSW_ROOT}/modes/pointing_mode.cpp
