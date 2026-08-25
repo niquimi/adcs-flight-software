@@ -18,8 +18,6 @@ public:
 
     AttitudeCommand update(const SpacecraftState& state) override;
 
-    static constexpr float kExitBatteryPercentage = 0.35f;
-
 private:
     SunReference sunReference_;
     PdController pd_;

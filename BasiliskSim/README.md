@@ -14,9 +14,9 @@ monitoring. Hub mass, inertia, and SSO inclination are set in
 - Panels on +Z: `P_gen ∝ max(0, CSS_Z) * eclipse_shadow` (umbra → generation ≈ 0).
 - `P_load` from FSW `ModeId` over SIL (Detumble &gt; Pointing &gt; Standby &gt; Safe) plus optional `|τ|`.
 - Capacity `E_cap ≈ 4e5 W·s` (~111 Wh) so SOC moves over 1–2 LEO orbits.
-- FSW: enter Safe if SOC &lt; 0.25; leave Safe if SOC &gt; 0.35 (level deadband, no time hold).
+- FSW `EpsManager`: enter Safe if SOC &lt; 0.25; leave Safe if SOC &gt; 0.35 (level deadband, no time hold).
 - Vizard GenericStorage bars: battery SOC and FSW mode from the status packet.
-- `SensorPacket.batteryLevel` (108 B telemetry) feeds the estimator / Safe supervisor.
+- `SensorPacket.batteryLevel` (108 B telemetry) feeds the estimator and onboard EPS.
 
 ## Requirements
 

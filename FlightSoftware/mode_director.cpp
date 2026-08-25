@@ -2,14 +2,13 @@
 
 #include "modes/standby_mode.h"
 #include "modes/detumble_mode.h"
-#include "modes/safe_mode.h"
 
 ModeId ModeDirector::selectNextMode(const Input& in) const {
     if (in.timestamp_s < in.boot_standby_duration_s) {
         return ModeId::Standby;
     }
 
-    if (in.battery_level < kEnterSafeBattery) {
+    if (in.force_safe) {
         return ModeId::Safe;
     }
 
@@ -39,7 +38,7 @@ ModeId ModeDirector::selectNextMode(const Input& in) const {
             return ModeId::Pointing;
 
         case ModeId::Safe:
-            if (in.battery_level > SafeMode::kExitBatteryPercentage) {
+            if (in.allow_exit_safe) {
                 return (rate > StandbyMode::kEnterDetumbleRateRadps)
                     ? ModeId::Detumble
                     : ModeId::Standby;

@@ -37,14 +37,18 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
         bootHoldLogged_ = true;
     }
 
+    const EpsReport eps = eps_.evaluate(state.batteryLevel);
+    const FdirReport fdir = fdir_.evaluate(state, active_->id());
+
     ModeDirector::Input in;
     in.current = active_->id();
     in.timestamp_s = state.timestamp_s;
     in.boot_standby_duration_s = bootStandbyDuration_s_;
-    in.battery_level = state.batteryLevel;
     in.rate_radps = math::vec3_norm(state.omega_radps);
     in.ref_ok = referenceValid(state);
     in.rates_settled = detumble_.ratesSettled();
+    in.force_safe = eps.request_safe || fdir.force_safe;
+    in.allow_exit_safe = eps.allow_exit_safe && !fdir.force_safe;
 
     const ModeId next = director_.selectNextMode(in);
     if (next != active_->id()) {

@@ -3,6 +3,8 @@
 #include "types.h"
 #include "sensor_packet.h"
 #include "operation_mode.h"
+#include "eps/eps_manager.h"
+#include "fdir/fdir_manager.h"
 #include "estimation/state_estimator.h"
 #include "modes/detumble_mode.h"
 #include "modes/standby_mode.h"
@@ -30,6 +32,8 @@ public:
 private:
     StateEstimator state_estimator_;
     ModeDirector director_;
+    EpsManager eps_;
+    FdirManager fdir_;
 
     DetumbleMode detumble_;
     StandbyMode standby_;

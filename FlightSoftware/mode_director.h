@@ -4,16 +4,15 @@
 
 class ModeDirector {
 public:
-    static constexpr float kEnterSafeBattery = 0.25f;
-
     struct Input {
         ModeId current;
         float timestamp_s;
         float boot_standby_duration_s;
-        float battery_level;
         float rate_radps;
         bool ref_ok;
         bool rates_settled;
+        bool force_safe;
+        bool allow_exit_safe;
     };
 
     ModeId selectNextMode(const Input& in) const;

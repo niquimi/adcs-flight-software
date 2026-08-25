@@ -1,6 +1,6 @@
 # Flight Software
 
-This directory is the product: onboard ADCS and the mode director.
+This directory is the product: onboard ADCS, mode director, EPS energy policy, and an FDIR stub.
 
 `SIL/cpp` calls `FlightSoftware::step` once per sensor packet. Basilisk is only the plant on the other side of that call.
 
@@ -8,17 +8,20 @@ This directory is the product: onboard ADCS and the mode director.
 
 ```text
 sensors → StateEstimator → SpacecraftState
-        → selectNextMode  (boot hold, then Safe, then table below)
+        → EPS (SOC deadband) + FDIR (no-op)
+        → ModeDirector::selectNextMode  (boot hold, then force_safe, then table below)
         → enter/exit if mode changed
         → active mode: error + PD + RW map
         → AttitudeCommand (torques + ModeId telemetry)
 ```
 
-Modes never pick the next mode. `AttitudeCommand.active_mode` is what flew this cycle.
+Modes never pick the next mode. `AttitudeCommand.active_mode` is what flew this cycle. `FlightSoftware` wires EPS and FDIR into director flags; it does not contain the transition table.
 
 ## Mode director
 
-Implemented in `selectNextMode` (`mode_director.cpp`). Thresholds live on the mode classes (`kEnterDetumbleRateRadps`, `kExitRateRadps`, `kExitHold_s`, `kExitBatteryPercentage`). Optional `bootStandbyDuration_s` (SIL `PACKET_BOOT_CONFIG`) holds Standby until that sim time — 60 s in the default demo, 0 in the FSW test scenarios.
+Implemented in `ModeDirector::selectNextMode` (`mode_director.cpp`). Rate thresholds live on the mode classes (`kEnterDetumbleRateRadps`, `kExitRateRadps`, `kExitHold_s`). SOC thresholds live on `EpsManager` (`kEnterSafeSoc` 0.25, `kExitSafeSoc` 0.35). Optional `bootStandbyDuration_s` (SIL `PACKET_BOOT_CONFIG`) holds Standby until that sim time — 60 s in the default demo, 0 in the FSW test scenarios.
+
+The director does not read SOC. It sees `force_safe` (EPS low-SOC **or** FDIR) and `allow_exit_safe` (EPS recovered **and** FDIR not forcing Safe). FDIR currently always reports `force_safe = false`.
 
 ```mermaid
 stateDiagram-v2
@@ -35,16 +38,22 @@ stateDiagram-v2
     Safe --> Standby: SOC > 0.35 and ||ω|| ≤ 0.015
 ```
 
-While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, Pointing, or Safe). Pointing does **not** re-enter Detumble on body rate — the PD law can exceed the Standby tumble threshold during normal acquisition; only **Standby** (and **Safe** on exit) use `‖ω‖ > 0.015` to enter Detumble.
+While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, Pointing, or Safe — boot hold preempts EPS). Pointing does **not** re-enter Detumble on body rate — the PD law can exceed the Standby tumble threshold during normal acquisition; only **Standby** (and **Safe** on exit) use `‖ω‖ > 0.015` to enter Detumble.
 
 | Mode | Law | Notes |
 |---|---|---|
 | Standby | Command zeros (clears residual RW/MTB) | Dispatcher |
 | Detumble | PD, `Kp = 0`, `Kd` on `−ω` | `ratesSettled()` is 5 s under 0.005 rad/s |
 | Pointing | 2-axis PD on sun or nadir error | Default target: nadir (`−Z` to Earth) |
-| Safe | Same sun error as Pointing-sun (`SunReference`) | Supervisor; +Z panels |
+| Safe | Same sun error as Pointing-sun (`SunReference`) | Energy supervisor; +Z panels |
 
 `ref_ok` is `nadir_valid` or `css_valid` according to the pointing target. In eclipse, nadir can stay valid (filter coasts); sun-pointing does not.
+
+## EPS and FDIR
+
+`EpsManager` owns the SOC deadband (enter Safe below 0.25, leave above 0.35). The battery itself is still integrated in Basilisk; onboard EPS is policy on the telemetered SOC, not a second energy model. `modeLoadW` matches the plant's mode loads and is not applied to torque yet.
+
+`FdirManager::evaluate` is a stub (`force_safe = false`). It runs every cycle so later detectors can preempt the director without changing the mode table.
 
 ## ADCS pipeline
 
@@ -66,7 +75,10 @@ Pointing errors: sun aligns body +Z with `ŝ_B`; nadir aligns body `−Z` with n
 
 ```text
 types.h                    ModeId, SpacecraftState, AttitudeCommand
-flight_software.h/.cpp     step, reset, mode director
+flight_software.h/.cpp     step, reset; wires estimator, EPS, FDIR, director
+mode_director.h/.cpp       transition table (boot hold, force_safe, rates, ref)
+eps/                       SOC Safe deadband
+fdir/                      stub; can force Safe later
 operation_mode.h           enter / update / exit
 modes/                     Standby, Detumble, Pointing, Safe
 estimation/                CSS, Kepler, sun/mag, TRIAD, filter
