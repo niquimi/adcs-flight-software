@@ -6,6 +6,7 @@
 #include "sensor_packet.h"
 #include "sensor_receiver.h"
 #include "types.h"
+#include "fault_injector.h"
 
 #include <iostream>
 
@@ -145,6 +146,8 @@ int main() {
         std::cout << "Boot Standby hold: " << boot_standby_s << " s\n";
     }
 
+    FaultInjector injector;
+
     while (true) {
         SensorPacket sensors{};
         if (!receiveSensorPacket(clientSocket, sensors)) {
@@ -152,6 +155,8 @@ int main() {
             break;
         }
 
+        injector.apply(sensors, fsw);
+        
         // Single FSW entry point — modes/control live inside step().
         const AttitudeCommand cmd = fsw.step(sensors);
 

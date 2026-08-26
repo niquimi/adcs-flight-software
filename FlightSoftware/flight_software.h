@@ -28,6 +28,10 @@ public:
     /** Hold Standby until timestamp_s reaches this (launcher separation). 0 = off. */
     void setBootStandbyDuration(float duration_s);
 
+#ifdef ADCS_ENABLE_FAULT_INJECTION
+    ModeId& silModeReplica(int i);
+#endif
+
 
 private:
     StateEstimator state_estimator_;

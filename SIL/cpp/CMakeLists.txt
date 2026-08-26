@@ -11,6 +11,7 @@ add_executable(
     sil_connection.cpp
     sensor_receiver.cpp
     command_sender.cpp
+    fault_injector.cpp
     boot_config_receiver.cpp
     ${FSW_ROOT}/flight_software.cpp
     ${FSW_ROOT}/mode_director.cpp
@@ -45,6 +46,8 @@ target_include_directories(
         ${FSW_ROOT}/actuators
         ${FSW_ROOT}/pointing
 )
+
+target_compile_definitions(sensor_receiver PRIVATE ADCS_ENABLE_FAULT_INJECTION)
 
 if(WIN32)
     target_link_libraries(sensor_receiver PRIVATE ws2_32)

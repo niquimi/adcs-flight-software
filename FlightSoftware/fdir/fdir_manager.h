@@ -22,6 +22,8 @@ public:
 
     FdirReport evaluate(const SpacecraftState& state, ModeId current) const;
 
+    ModeId& modeReplica(int i) { return mode_.replica(i); }
+
 private:
     static bool modeIdValid(ModeId id);
 

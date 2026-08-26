@@ -6,6 +6,12 @@
 
 #include <iostream>
 
+#ifdef ADCS_ENABLE_FAULT_INJECTION
+ModeId& FlightSoftware::silModeReplica(int i) {
+    return fdir_.modeReplica(i);
+}
+#endif
+
 FlightSoftware::FlightSoftware() {
     reset();
 }

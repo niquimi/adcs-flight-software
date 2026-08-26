@@ -1,5 +1,7 @@
 #include "fdir_manager.h"
 
+#include <iostream>
+
 bool FdirManager::modeIdValid(ModeId id) {
     return static_cast<std::uint8_t>(id)
         <= static_cast<std::uint8_t>(ModeId::Safe);
@@ -22,6 +24,9 @@ ModeId FdirManager::votedMode() {
     tmr_no_majority_ = !mode_.hasMajority() || !modeIdValid(id);
     if (tmr_mismatch_) {
         ++tmr_mismatch_count_;
+        std::cout << "FDIR TMR ModeId mismatch"
+                  << (tmr_no_majority_ ? " (fail-safe Safe)" : "(repaired)")
+                  << "\n";
     }
     if (tmr_no_majority_) {
         id = ModeId::Safe;
