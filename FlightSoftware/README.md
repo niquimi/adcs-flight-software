@@ -1,6 +1,6 @@
 # Flight Software
 
-This directory is the product: onboard ADCS, mode director, EPS energy policy, and an FDIR stub.
+This directory is the product: onboard ADCS, mode director, EPS energy policy, and FDIR (TMR on `ModeId` and critical flags).
 
 `SIL/cpp` calls `FlightSoftware::step` once per sensor packet. Basilisk is only the plant on the other side of that call.
 
@@ -8,9 +8,12 @@ This directory is the product: onboard ADCS, mode director, EPS energy policy, a
 
 ```text
 sensors → StateEstimator → SpacecraftState
-        → EPS (SOC deadband) + FDIR (no-op)
+        → FDIR vote/repair ModeId (fail-safe Safe if no majority)
+        → EPS (SOC deadband)
+        → TMR on force_safe / allow_exit_safe / ref_ok
         → ModeDirector::selectNextMode  (boot hold, then force_safe, then table below)
         → enter/exit if mode changed
+        → FDIR commit ModeId (write all 3 replicas)
         → active mode: error + PD + RW map
         → AttitudeCommand (torques + ModeId telemetry)
 ```
@@ -21,7 +24,7 @@ Modes never pick the next mode. `AttitudeCommand.active_mode` is what flew this 
 
 Implemented in `ModeDirector::selectNextMode` (`mode_director.cpp`). Rate thresholds live on the mode classes (`kEnterDetumbleRateRadps`, `kExitRateRadps`, `kExitHold_s`). SOC thresholds live on `EpsManager` (`kEnterSafeSoc` 0.25, `kExitSafeSoc` 0.35). Optional `bootStandbyDuration_s` (SIL `PACKET_BOOT_CONFIG`) holds Standby until that sim time — 60 s in the default demo, 0 in the FSW test scenarios.
 
-The director does not read SOC. It sees `force_safe` (EPS low-SOC **or** FDIR) and `allow_exit_safe` (EPS recovered **and** FDIR not forcing Safe). FDIR currently always reports `force_safe = false`.
+The director does not read SOC. It sees `force_safe` (EPS low-SOC **or** FDIR TMR fail-safe) and `allow_exit_safe` (EPS recovered **and** FDIR not forcing Safe). `current` is the voted `ModeId`, not the controller pointer.
 
 ```mermaid
 stateDiagram-v2
@@ -38,7 +41,7 @@ stateDiagram-v2
     Safe --> Standby: SOC > 0.35 and ||ω|| ≤ 0.015
 ```
 
-While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, Pointing, or Safe — boot hold preempts EPS). Pointing does **not** re-enter Detumble on body rate — the PD law can exceed the Standby tumble threshold during normal acquisition; only **Standby** (and **Safe** on exit) use `‖ω‖ > 0.015` to enter Detumble.
+While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, Pointing, or Safe — boot hold preempts EPS and FDIR). Pointing does **not** re-enter Detumble on body rate — the PD law can exceed the Standby tumble threshold during normal acquisition; only **Standby** (and **Safe** on exit) use `‖ω‖ > 0.015` to enter Detumble.
 
 | Mode | Law | Notes |
 |---|---|---|
@@ -53,7 +56,9 @@ While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, P
 
 `EpsManager` owns the SOC deadband (enter Safe below 0.25, leave above 0.35). The battery itself is still integrated in Basilisk; onboard EPS is policy on the telemetered SOC, not a second energy model. `modeLoadW` matches the plant's mode loads and is not applied to torque yet.
 
-`FdirManager::evaluate` is a stub (`force_safe = false`). It runs every cycle so later detectors can preempt the director without changing the mode table.
+FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majority vote, repair the dissenter). If there is no majority or the voted `ModeId` is not 0–3, FDIR writes Safe to all replicas and sets `force_safe`. Mismatch counts stay onboard (`FdirReport`); they are not on the SIL packet yet. There is no fault injector and no sensor-range / watchdog detectors yet.
+
+Boot Standby still preempts `force_safe` in the director, so a TMR fail-safe during the 60 s launcher hold does not stay in Safe until boot ends.
 
 ## ADCS pipeline
 
@@ -78,7 +83,7 @@ types.h                    ModeId, SpacecraftState, AttitudeCommand
 flight_software.h/.cpp     step, reset; wires estimator, EPS, FDIR, director
 mode_director.h/.cpp       transition table (boot hold, force_safe, rates, ref)
 eps/                       SOC Safe deadband
-fdir/                      stub; can force Safe later
+fdir/                      TMR (`tmr.h`); ModeId vote/repair; flag TMR
 operation_mode.h           enter / update / exit
 modes/                     Standby, Detumble, Pointing, Safe
 estimation/                CSS, Kepler, sun/mag, TRIAD, filter

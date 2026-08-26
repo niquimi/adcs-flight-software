@@ -1,6 +1,6 @@
 # Onboard ADCS Flight Software
 
-C++17 flight software for a LEO spacecraft: **attitude determination**, **attitude control**, an autonomous **mode director**, and onboard **EPS** energy policy (FDIR is a stub).
+C++17 flight software for a LEO spacecraft: **attitude determination**, **attitude control**, an autonomous **mode director**, onboard **EPS** energy policy, and **FDIR** (TMR on mode and critical flags).
 
 [Basilisk](https://hanspeterschaub.info/basilisk/) is the dynamics environment used to exercise it. A thin software-in-the-loop (SIL) link carries sensors in and actuator commands out. The GNC logic lives in [`FlightSoftware/`](FlightSoftware/README.md) — it does **not** copy attitude from the simulator.
 
@@ -10,7 +10,7 @@ C++17 flight software for a LEO spacecraft: **attitude determination**, **attitu
 
 ## Mode director
 
-`ModeDirector::selectNextMode` is the only place that changes mode. Each mode only computes torque. `EpsManager` owns the SOC deadband and can request Safe; `FdirManager` can force Safe later (today it never does). The default demo also holds **Standby for 60 s of sim time** (launcher separation) via `run(boot_standby_s=60)`; the FSW test scenarios leave this at 0.
+`ModeDirector::selectNextMode` is the only place that changes mode. Each mode only computes torque. `EpsManager` owns the SOC deadband and can request Safe; `FdirManager` votes a triplicated `ModeId` and can force Safe if the replicas disagree or the value is illegal. The default demo also holds **Standby for 60 s of sim time** (launcher separation) via `run(boot_standby_s=60)`; the FSW test scenarios leave this at 0.
 
 ```mermaid
 stateDiagram-v2
@@ -34,15 +34,16 @@ stateDiagram-v2
 | **Pointing** | 2-axis PD, nadir (default) or sun | Mission attitude |
 | **Safe** | Sun-point body +Z (`SunReference`) | Energy: panels toward the sun when SOC is low |
 
-Battery uses a **level** deadband in `EpsManager` (enter &lt; 0.25, exit &gt; 0.35), not a time hold. Rate damping uses a 5 s dwell under 0.005 rad/s so Pointing does not start on a single quiet sample. The `‖ω‖ > 0.015` Detumble entry applies from **Standby** (and **Safe** on exit), not from Pointing — the pointing controller can legitimately exceed that rate during acquisition. Pointing/sun references must be valid (`nadir_valid` or `css_valid`) before leaving Detumble or Standby for Pointing; if the reference drops in Pointing, the director returns to Standby. While boot Standby is held, EPS cannot force Safe.
+Battery uses a **level** deadband in `EpsManager` (enter &lt; 0.25, exit &gt; 0.35), not a time hold. Rate damping uses a 5 s dwell under 0.005 rad/s so Pointing does not start on a single quiet sample. The `‖ω‖ > 0.015` Detumble entry applies from **Standby** (and **Safe** on exit), not from Pointing — the pointing controller can legitimately exceed that rate during acquisition. Pointing/sun references must be valid (`nadir_valid` or `css_valid`) before leaving Detumble or Standby for Pointing; if the reference drops in Pointing, the director returns to Standby. While boot Standby is held, neither EPS nor FDIR TMR fail-safe can stay in Safe.
 
 Each `step()`:
 
 1. Estimate spacecraft state (onboard models + sensors).
-2. EPS on SOC; FDIR on the estimated state (stub).
-3. Choose the next mode (optional boot Standby hold, then `force_safe`, then the table above).
-4. `exit` / `enter` if the mode changed.
-5. Run **that** mode’s controller. `active_mode` is telemetry of the mode that flew, not a request.
+2. FDIR majority-vote `ModeId` (repair 2-of-3; Safe if no majority or illegal id).
+3. EPS on SOC; TMR on `force_safe` / `allow_exit_safe` / `ref_ok`.
+4. Choose the next mode (optional boot Standby hold, then `force_safe`, then the table above).
+5. `exit` / `enter` if the mode changed; FDIR commits the three `ModeId` replicas.
+6. Run **that** mode’s controller. `active_mode` is telemetry of the mode that flew, not a request.
 
 ## Attitude determination and control
 
@@ -66,7 +67,7 @@ flowchart TB
     Ref --> Modes
     SOC[Battery SOC] --> EPS[EPS]
     EPS --> Modes
-    FDIR[FDIR stub] --> Modes
+    FDIR[FDIR TMR] --> Modes
     Modes --> RW[Reaction-wheel torque]
 ```
 
@@ -130,7 +131,7 @@ flowchart LR
 
 | Piece | Role |
 |---|---|
-| `FlightSoftware/` | ADCS, mode director, EPS, FDIR stub (`step` once per packet) |
+| `FlightSoftware/` | ADCS, mode director, EPS, FDIR TMR (`step` once per packet) |
 | `SIL/cpp/` | TCP server, packed protocol, CRC-32 |
 | `BasiliskSim/` | Plant, SOC, Vizard, Python bridge |
 
@@ -152,14 +153,14 @@ Or `.\run_sil.ps1` from the repo root (`VIZARD_EXE` optional). Details: [FlightS
 ## Layout
 
 ```text
-FlightSoftware/     ADCS + mode director + EPS + FDIR stub  ← this is the product
+FlightSoftware/     ADCS + mode director + EPS + FDIR TMR  ← this is the product
 SIL/cpp/            I/O adapter (TCP, CRC, packed structs)
 BasiliskSim/        Dynamics environment (plant, SOC, Vizard)
 ```
 
 ## Limitations (demo)
 
-- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only; FDIR does not detect faults yet.
+- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only. FDIR TMR protects `ModeId` and director flags; there is no fault injection, sensor-range detection, or SIL mismatch telemetry yet.
 - Detumble on reaction wheels only; magnetorquers are in the plant but unused.
 - Pointing is two-axis (no yaw / ground-track constraint).
 - Orbit / sun / mag models match this scenario, not GPS/TLE or full-order IGRF.

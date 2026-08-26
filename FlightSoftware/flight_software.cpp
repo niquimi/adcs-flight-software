@@ -13,6 +13,7 @@ FlightSoftware::FlightSoftware() {
 void FlightSoftware::reset() {
     active_ = &standby_;
     active_->enter();
+    fdir_.reset(ModeId::Standby);
     lastOrbitLog_s_ = -kOrbitLogInterval_s;
     bootHoldLogged_ = false;
     state_estimator_.reset();
@@ -37,18 +38,40 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
         bootHoldLogged_ = true;
     }
 
+    // Vote persistant ModeId
+    const ModeId current = fdir_.votedMode();
+    if (current != active_->id()) {
+        active_->exit();
+        modeFor(current);
+        active_->enter();
+        printModeChange(current, state.timestamp_s);
+    }
+
     const EpsReport eps = eps_.evaluate(state.batteryLevel);
-    const FdirReport fdir = fdir_.evaluate(state, active_->id());
+
+    fdir_.captureFlags(
+        eps.request_safe,
+        eps.allow_exit_safe,
+        referenceValid(state)
+    );
+    bool force_safe = false;
+    bool allow_exit_safe = false;
+    bool ref_ok = false;
+    fdir_.readFlags(force_safe, allow_exit_safe, ref_ok);
+
+    const FdirReport fdir = fdir_.evaluate(state, current);
+    force_safe = force_safe || fdir.force_safe;
+    allow_exit_safe = allow_exit_safe && !fdir.force_safe;
 
     ModeDirector::Input in;
-    in.current = active_->id();
+    in.current = current;
     in.timestamp_s = state.timestamp_s;
     in.boot_standby_duration_s = bootStandbyDuration_s_;
     in.rate_radps = math::vec3_norm(state.omega_radps);
-    in.ref_ok = referenceValid(state);
+    in.ref_ok = ref_ok;
     in.rates_settled = detumble_.ratesSettled();
-    in.force_safe = eps.request_safe || fdir.force_safe;
-    in.allow_exit_safe = eps.allow_exit_safe && !fdir.force_safe;
+    in.force_safe = force_safe;
+    in.allow_exit_safe = allow_exit_safe;
 
     const ModeId next = director_.selectNextMode(in);
     if (next != active_->id()) {
@@ -57,6 +80,8 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
         active_->enter();
         printModeChange(next, state.timestamp_s);
     }
+
+    fdir_.commitMode(active_->id());
 
     AttitudeCommand cmd = active_->update(state);
     cmd.active_mode = active_->id();
