@@ -1,6 +1,6 @@
 # SIL: Software-In-the-Loop
 
-I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, calls `FlightSoftware::step` once per packet, and sends RW / MTB / `ModeId` back.
+I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, optionally injects a SIL-only fault, calls `FlightSoftware::step` once per packet, and sends RW / MTB / `ModeId` back.
 
 ## Architecture
 
@@ -11,6 +11,7 @@ C++ SIL server (accepts 1 connection)
   ← BootConfig (32 B)        once after connect (`boot_standby_s`)
   ← SensorPacket (108 B)     telemetry
   → CommandPacket (32 B)     RW / MTB / FSW status
+  FaultInjector (optional)   before `step()`, env-gated, not in the protocol
 ```
 
 - **Clock**: Basilisk `ClockSynch` with `accelFactor=10` in the default scenario (1 s wall ≈ 10 s sim).
@@ -62,11 +63,34 @@ Payload (12 bytes) + `crc32` (4 bytes):
 `crc32` covers every byte of the packet **except** the last 4 (same algorithm as `crc32.h`).
 The C++ loop sends status **every** cycle, then RW/MTB if the command flags are set.
 
+## Fault injection (SIL only)
+
+`FaultInjector` runs in `sil_connection.cpp` **before** `FlightSoftware::step`. It is compiled into `sensor_receiver` (`ADCS_ENABLE_FAULT_INJECTION`). Off unless these environment variables are set (sim time `timestamp_s`, one shot each):
+
+| Variable | Effect |
+|---|---|
+| `ADCS_INJECT_MODE_AT` | XOR `0x04` into TMR replica 0 of `ModeId` (e.g. Pointing `2` → `6`) |
+| `ADCS_INJECT_SOC_AT` | Force `SensorPacket.batteryLevel = 0.10` (below the EPS Safe enter threshold) |
+
+```powershell
+$env:ADCS_INJECT_MODE_AT="120"
+$env:ADCS_INJECT_SOC_AT="180"
+.\SIL\cpp\build\Release\sensor_receiver.exe
+```
+
+Unset both for a clean run. Expected console:
+
+- Mode inject while in Pointing: `INJECT ModeId replica0 2->6` then `FDIR TMR ModeId mismatch(repaired)` — **no** new `Mode=` line (TMR restored Pointing).
+- SOC inject **after** boot Standby ends: `INJECT SOC=0.10` then `Mode=Safe` (EPS). During the 60 s default boot hold, the director stays in Standby and ignores Safe.
+
+Not on the wire: no extra packet type. Telecommands come later.
+
 ## C++ files (`SIL/cpp`)
 
 | File | Role |
 |---|---|
 | `sil_connection.cpp` | `main`, TCP server, SIL loop |
+| `fault_injector.cpp` | Env-gated ModeId replica bit-flip and SOC drop |
 | `sensor_receiver.cpp` | `receiveSensorPacket` — 108 B |
 | `command_sender.cpp` | `sendRwTorque` / `sendMtbDipole` / `sendFswStatus` |
 | `boot_config_receiver.cpp` | `receiveBootConfig` — plant → FSW once after connect |

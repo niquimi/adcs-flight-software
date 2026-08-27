@@ -56,7 +56,9 @@ While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, P
 
 `EpsManager` owns the SOC deadband (enter Safe below 0.25, leave above 0.35). The battery itself is still integrated in Basilisk; onboard EPS is policy on the telemetered SOC, not a second energy model. `modeLoadW` matches the plant's mode loads and is not applied to torque yet.
 
-FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majority vote, repair the dissenter). If there is no majority or the voted `ModeId` is not 0–3, FDIR writes Safe to all replicas and sets `force_safe`. Mismatch counts stay onboard (`FdirReport`); they are not on the SIL packet yet. There is no fault injector and no sensor-range / watchdog detectors yet.
+FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majority vote, repair the dissenter). If there is no majority or the voted `ModeId` is not 0–3, FDIR writes Safe to all replicas and sets `force_safe`. Mismatch counts stay onboard (`FdirReport`); they are not on the SIL packet yet. A console line `FDIR TMR ModeId mismatch(repaired)` or `… (fail-safe Safe)` prints when the vote disagrees.
+
+Fault injection is **not** onboard FDIR. The SIL `FaultInjector` runs before `step()` and can bit-flip replica 0 of `ModeId` or force `batteryLevel = 0.10` (see [SIL README](../SIL/README.md#fault-injection-sil-only)). There are no sensor-range or watchdog detectors yet.
 
 Boot Standby still preempts `force_safe` in the director, so a TMR fail-safe during the 60 s launcher hold does not stay in Safe until boot ends.
 
@@ -80,7 +82,7 @@ Pointing errors: sun aligns body +Z with `ŝ_B`; nadir aligns body `−Z` with n
 
 ```text
 types.h                    ModeId, SpacecraftState, AttitudeCommand
-flight_software.h/.cpp     step, reset; wires estimator, EPS, FDIR, director
+flight_software.h/.cpp     step, reset; wires estimator, EPS, FDIR, director (`silModeReplica` if SIL)
 mode_director.h/.cpp       transition table (boot hold, force_safe, rates, ref)
 eps/                       SOC Safe deadband
 fdir/                      TMR (`tmr.h`); ModeId vote/repair; flag TMR

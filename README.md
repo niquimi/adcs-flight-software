@@ -117,11 +117,12 @@ flowchart LR
     end
     subgraph sil [SIL]
         TCP[TCP :5557]
+        Inj[FaultInjector]
     end
     subgraph fsw [Flight software]
         Step["FlightSoftware::step"]
     end
-    Sensors -->|SensorPacket 108 B| TCP --> Step
+    Sensors -->|SensorPacket 108 B| TCP --> Inj --> Step
     Step -->|RW / MTB / ModeId| TCP
     TCP --> Plant
     TCP -->|ModeId| SOC
@@ -132,7 +133,7 @@ flowchart LR
 | Piece | Role |
 |---|---|
 | `FlightSoftware/` | ADCS, mode director, EPS, FDIR TMR (`step` once per packet) |
-| `SIL/cpp/` | TCP server, packed protocol, CRC-32 |
+| `SIL/cpp/` | TCP server, packed protocol, CRC-32, optional fault injection |
 | `BasiliskSim/` | Plant, SOC, Vizard, Python bridge |
 
 Ports: **5556** Vizard DirectComm, **5557** SIL duplex.
@@ -154,13 +155,13 @@ Or `.\run_sil.ps1` from the repo root (`VIZARD_EXE` optional). Details: [FlightS
 
 ```text
 FlightSoftware/     ADCS + mode director + EPS + FDIR TMR  ← this is the product
-SIL/cpp/            I/O adapter (TCP, CRC, packed structs)
+SIL/cpp/            I/O adapter (TCP, CRC, packed structs, SIL-only fault injection)
 BasiliskSim/        Dynamics environment (plant, SOC, Vizard)
 ```
 
 ## Limitations (demo)
 
-- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only. FDIR TMR protects `ModeId` and director flags; there is no fault injection, sensor-range detection, or SIL mismatch telemetry yet.
+- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only. FDIR TMR protects `ModeId` and director flags. SIL can inject a one-shot `ModeId` replica bit-flip or SOC drop (`ADCS_INJECT_MODE_AT` / `ADCS_INJECT_SOC_AT`; see [SIL](SIL/README.md#fault-injection-sil-only)). No sensor-range detectors or mismatch telemetry on the SIL packet yet.
 - Detumble on reaction wheels only; magnetorquers are in the plant but unused.
 - Pointing is two-axis (no yaw / ground-track constraint).
 - Orbit / sun / mag models match this scenario, not GPS/TLE or full-order IGRF.
