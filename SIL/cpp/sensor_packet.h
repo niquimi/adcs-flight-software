@@ -19,26 +19,10 @@ struct SensorPacket {
     float css_pz;
     float css_mz;
     float batteryLevel;
-    // Verification data, not a sensor. FSW estimators must not use these fields.
-    float eclipse_shadow;
-    float r_BN_x;
-    float r_BN_y;
-    float r_BN_z;
-    // Inertial unit references from the sim (SIL). Zero → FSW uses onboard models.
-    float sun_N_x;
-    float sun_N_y;
-    float sun_N_z;
-    float B_N_x;
-    float B_N_y;
-    float B_N_z;
-    // Verification: Basilisk MRP attitude. FSW TRIAD must not use these fields.
-    float sigma_BN_x;
-    float sigma_BN_y;
-    float sigma_BN_z;
 };
 #pragma pack(pop)
 
-static_assert(sizeof(SensorPacket) == 108, "SensorPacket must be exactly 108 bytes");
+static_assert(sizeof(SensorPacket) == 56, "SensorPacket must be exactly 56 bytes");
 static_assert(sizeof(float) == 4, "float must be 4 bytes for Python struct '<27f' compatibility");
 
 constexpr std::size_t kSensorPacketSize = sizeof(SensorPacket);

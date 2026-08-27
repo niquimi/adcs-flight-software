@@ -32,7 +32,6 @@ public:
     ModeId& silModeReplica(int i);
 #endif
 
-
 private:
     StateEstimator state_estimator_;
     ModeDirector director_;
@@ -49,7 +48,6 @@ private:
     bool referenceValid(const SpacecraftState& state) const;
     void modeFor(ModeId id);
     void printModeChange(ModeId id, float timestamp_s) const;
-    void printEstCompare(const SpacecraftState& state, const SensorPacket& sensors) const;
 
     static constexpr float kOrbitLogInterval_s = 5.0f;
 

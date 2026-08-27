@@ -267,11 +267,6 @@ class SensorSocketBridge(sysModel.SysModel):
             mag_nt,
             css_values,
             battery_level,
-            eclipse_data.shadowFactor,
-            sun_N,
-            B_N,
-            r_BN,
-            sigma_BN,
         )
         try:
             # sendall needs a blocking socket; restore non-blocking afterwards.

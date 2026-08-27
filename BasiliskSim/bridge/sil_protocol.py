@@ -6,10 +6,9 @@ import struct
 import zlib
 from typing import Sequence
 
-# Matches SIL/cpp/sensor_packet.h (27 floats → 108 bytes).
-# Order: timestamp, gyro[3], mag[3], css[6] (±X ±Y ±Z raw), batteryLevel, eclipse_shadow,
-#        r_BN[3] (verification), sun_N[3], B_N[3], sigma_BN[3] (verification)
-SENSOR_FMT = "<27f"
+# Matches SIL/cpp/sensor_packet.h (14 floats → 56 bytes).
+# Order: timestamp, gyro[3], mag[3], css[6] (±X ±Y ±Z raw), batteryLevel
+SENSOR_FMT = "<14f"
 SENSOR_PACKET_SIZE = struct.calcsize(SENSOR_FMT)
 
 # Matches SIL/cpp/command_packets.h (all floats for ESP32-native layout).
@@ -29,7 +28,7 @@ COMMAND_PACKET_SIZE = struct.calcsize(COMMAND_PACKET_FMT)
 
 assert COMMAND_HEADER_SIZE == 16
 assert COMMAND_PACKET_SIZE == 32
-assert SENSOR_PACKET_SIZE == 108
+assert SENSOR_PACKET_SIZE == 56
 
 
 def crc32(data: bytes) -> int:
@@ -58,20 +57,7 @@ def pack_sensor_packet(
     mag_nt: Sequence[float] | list[float],
     css: Sequence[float] | list[float],
     battery_level: float,
-    eclipse_shadow: float,
-    sun_N: Sequence[float] | list[float] | None = None,
-    B_N: Sequence[float] | list[float] | None = None,
-    r_BN: Sequence[float] | list[float] | None = None,
-    sigma_BN: Sequence[float] | list[float] | None = None,
 ) -> bytes:
-    if sun_N is None:
-        sun_N = (0.0, 0.0, 0.0)
-    if B_N is None:
-        B_N = (0.0, 0.0, 0.0)
-    if r_BN is None:
-        r_BN = (0.0, 0.0, 0.0)
-    if sigma_BN is None:
-        sigma_BN = (0.0, 0.0, 0.0)
     css6 = list(css)[:6] + [0.0] * max(0, 6 - len(css))
     return struct.pack(
         SENSOR_FMT,
@@ -89,19 +75,6 @@ def pack_sensor_packet(
         float(css6[4]),
         float(css6[5]),
         float(battery_level),
-        float(eclipse_shadow),
-        float(r_BN[0]),
-        float(r_BN[1]),
-        float(r_BN[2]),
-        float(sun_N[0]),
-        float(sun_N[1]),
-        float(sun_N[2]),
-        float(B_N[0]),
-        float(B_N[1]),
-        float(B_N[2]),
-        float(sigma_BN[0]),
-        float(sigma_BN[1]),
-        float(sigma_BN[2]),
     )
 
 
