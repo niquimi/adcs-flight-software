@@ -15,7 +15,7 @@ sensors → StateEstimator → SpacecraftState
         → enter/exit if mode changed
         → FDIR commit ModeId (write all 3 replicas)
         → active mode: error + PD + RW map
-        → AttitudeCommand (torques + ModeId telemetry)
+        → AttitudeCommand (torques + ModeId / flags / MRP telemetry)
 ```
 
 Modes never pick the next mode. `AttitudeCommand.active_mode` is what flew this cycle. `FlightSoftware` wires EPS and FDIR into director flags; it does not contain the transition table.
@@ -56,7 +56,7 @@ While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, P
 
 `EpsManager` owns the SOC deadband (enter Safe below 0.25, leave above 0.35). The battery itself is still integrated in Basilisk; onboard EPS is policy on the telemetered SOC, not a second energy model. `modeLoadW` matches the plant's mode loads and is not applied to torque yet.
 
-FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majority vote, repair the dissenter). If there is no majority or the voted `ModeId` is not 0–3, FDIR writes Safe to all replicas and sets `force_safe`. Mismatch counts stay onboard (`FdirReport`); they are not on the SIL packet yet. A console line `FDIR TMR ModeId mismatch(repaired)` or `… (fail-safe Safe)` prints when the vote disagrees.
+FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majority vote, repair the dissenter). If there is no majority or the voted `ModeId` is not 0–3, FDIR writes Safe to all replicas and sets `force_safe`. Mismatch counts are in `FdirReport` and on the SIL status packet (`tmr_mismatch_count`, flags bits 16/32). A console line `FDIR TMR ModeId mismatch(repaired)` or `… (fail-safe Safe)` prints when the vote disagrees.
 
 Fault injection is **not** onboard FDIR. The SIL `FaultInjector` runs before `step()` and can bit-flip replica 0 of `ModeId` or force `batteryLevel = 0.10` (see [SIL README](../SIL/README.md#fault-injection-sil-only)). There are no sensor-range or watchdog detectors yet.
 

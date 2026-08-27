@@ -16,7 +16,7 @@ monitoring. Hub mass, inertia, and SSO inclination are set in
 - Capacity `E_cap ≈ 4e5 W·s` (~111 Wh) so SOC moves over 1–2 LEO orbits.
 - FSW `EpsManager`: enter Safe if SOC &lt; 0.25; leave Safe if SOC &gt; 0.35 (level deadband, no time hold).
 - Vizard GenericStorage bars: battery SOC and FSW mode from the status packet.
-- `SensorPacket.batteryLevel` (108 B telemetry) feeds the estimator and onboard EPS.
+- `SensorPacket.batteryLevel` (56 B telemetry) feeds the estimator and onboard EPS.
 
 ## Requirements
 
@@ -79,8 +79,10 @@ Default `basic_orbit_vizard.py` starts in SIL:
    .\.venv\Scripts\python.exe .\BasiliskSim\scenarios\basic_orbit_vizard.py
    ```
 
-The Python bridge uses **one socket** at `127.0.0.1:5557`: it sends telemetry and
-receives RW/MTB commands plus FSW mode status.
+The Python bridge uses **one socket** at `127.0.0.1:5557`: it sends 56-byte sensor
+frames and receives 32-byte commands (status, estimated MRP, RW, MTB). Every 5 s
+of sim time it prints `SIL TM` (mode, Att vs plant truth, `|b|`, TMR, flags, SOC).
+RW/MTB torques are applied but not printed.
 
 Ports: `5556` Vizard, `5557` SIL bidirectional.
 

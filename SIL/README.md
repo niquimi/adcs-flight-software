@@ -1,6 +1,6 @@
 # SIL: Software-In-the-Loop
 
-I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, optionally injects a SIL-only fault, calls `FlightSoftware::step` once per packet, and sends RW / MTB / `ModeId` back.
+I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, optionally injects a SIL-only fault, calls `FlightSoftware::step` once per packet, and sends status / estimated MRP / RW / MTB back.
 
 ## Architecture
 
@@ -9,19 +9,19 @@ Basilisk (Python bridge, TCP client)
         ↕  same socket :5557
 C++ SIL server (accepts 1 connection)
   ← BootConfig (32 B)        once after connect (`boot_standby_s`)
-  ← SensorPacket (108 B)     telemetry
-  → CommandPacket (32 B)     RW / MTB / FSW status
+  ← SensorPacket (56 B)      gyro / mag / CSS / SOC
+  → CommandPacket (32 B)     status, estimated MRP, RW, MTB
   FaultInjector (optional)   before `step()`, env-gated, not in the protocol
 ```
 
 - **Clock**: Basilisk `ClockSynch` with `accelFactor=10` in the default scenario (1 s wall ≈ 10 s sim).
 - **Vizard**: DirectComm at `tcp://127.0.0.1:5556`.
 
-TCP is duplex. After connect the plant sends one 32-byte `PACKET_BOOT_CONFIG`, then 108-byte sensor frames. The server replies with 32-byte commands.
+TCP is duplex. After connect the plant sends one 32-byte `PACKET_BOOT_CONFIG`, then 56-byte sensor frames. The server replies with 32-byte commands. Plant truth (`sigma_BN`, `r_BN`, …) stays in Basilisk; it is **not** on `SensorPacket`.
 
-## Telemetry (`sensor_packet.h`) — 108 bytes
+## Telemetry (`sensor_packet.h`) — 56 bytes
 
-Little-endian, 27 floats (`<27f` in Python).
+Little-endian, 14 floats (`<14f` in Python).
 
 | Field | Type | Unit / notes |
 |---|---|---|
@@ -30,10 +30,6 @@ Little-endian, 27 floats (`<27f` in Python).
 | `mag_x/y/z` | float | nT |
 | `css_p/m{x,y,z}` | float | 6 orthogonal CSS |
 | `batteryLevel` | float | SOC 0..1 |
-| `eclipse_shadow` | float | 0..1 (1 = sun, 0 = umbra). Verification; FSW must not use it as a sensor |
-| `r_BN_*` | float | m, Earth-centered. Verification |
-| `sun_N_*`, `B_N_*` | float | unit inertial. Verification / compare |
-| `sigma_BN_*` | float | MRP truth. Verification; TRIAD must not use it |
 
 SOC is integrated in Basilisk (`BatterySocModel`):
 `SOC += (P_gen - P_load) / E_cap * dt`. `P_gen` uses CSS_Z and eclipse.
@@ -47,7 +43,7 @@ Shared header (`CommandHeader`, 16 bytes):
 |---|---|---|
 | `healthCheck` | uint32 | `0x53494C43` (`SILC`) |
 | `version` | uint16 | `1` |
-| `packet_type` | uint16 | `1` RW, `2` MTB, `3` FSW status, `4` boot config |
+| `packet_type` | uint16 | `1` RW, `2` MTB, `3` FSW status, `4` boot config, `6` FSW attitude |
 | `sequence` | uint32 | counter |
 | `timestamp_s` | float | s |
 
@@ -57,11 +53,12 @@ Payload (12 bytes) + `crc32` (4 bytes):
 |---|---|---|
 | `RWTorqueCommand` | `torque_Nm[3]` | N·m body X/Y/Z |
 | `MTBDipoleCommand` | `dipole_Am2[3]` | A·m² body X/Y/Z |
-| `FswStatusCommand` | `mode` (uint8) + 11 B pad | `ModeId`: 0 Standby, 1 Detumble, 2 Pointing, 3 Safe |
+| `FswStatusCommand` | `mode`, `flags`, `tmr_mismatch_count`, `gyro_bias_degph` | `ModeId` 0–3; flags: css=1, nadir=2, att=4, triad=8, tmr_mismatch=16, tmr_no_majority=32 |
 | `BootConfigCommand` | `boot_standby_s` + 8 B pad | Plant → FSW, once after connect. Hold Standby until this sim time (0 = off) |
+| `FswAttitudeCommand` | `sigma_BN[3]` | Estimated MRP from filtered `C_BN` (zeros if attitude invalid) |
 
 `crc32` covers every byte of the packet **except** the last 4 (same algorithm as `crc32.h`).
-The C++ loop sends status **every** cycle, then RW/MTB if the command flags are set.
+The C++ loop sends status and estimated MRP **every** cycle, then RW/MTB if the command flags are set. The Python bridge does **not** print RW/MTB torques. Every 5 s of sim time it prints one `SIL TM` line: mode, geodesic **Att** (FSW MRP vs plant `sc.sigma_BN`), `|b|`, TMR count, validity flags, SOC. Mode changes still print immediately (`SIL FSW mode=`).
 
 ## Fault injection (SIL only)
 
@@ -91,8 +88,8 @@ Not on the wire: no extra packet type. Telecommands come later.
 |---|---|
 | `sil_connection.cpp` | `main`, TCP server, SIL loop |
 | `fault_injector.cpp` | Env-gated ModeId replica bit-flip and SOC drop |
-| `sensor_receiver.cpp` | `receiveSensorPacket` — 108 B |
-| `command_sender.cpp` | `sendRwTorque` / `sendMtbDipole` / `sendFswStatus` |
+| `sensor_receiver.cpp` | `receiveSensorPacket` — 56 B |
+| `command_sender.cpp` | `sendRwTorque` / `sendMtbDipole` / `sendFswStatus` / `sendFswAttitude` |
 | `boot_config_receiver.cpp` | `receiveBootConfig` — plant → FSW once after connect |
 | `sensor_packet.h` / `command_packets.h` / `crc32.h` | Binary protocol |
 

@@ -86,6 +86,20 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
 
     AttitudeCommand cmd = active_->update(state);
     cmd.active_mode = active_->id();
+    cmd.gyro_bias_degph = math::vec3_norm(state.gyro_bias) * math::kRad2Deg * 3600.f;
+    cmd.validity_flags = 0;
+    if (state.css_valid) cmd.validity_flags |= 1;
+    if (state.nadir_valid) cmd.validity_flags |= 2;
+    if (state.attitude_valid) cmd.validity_flags |= 4;
+    if (state.triad_valid) cmd.validity_flags |= 8;
+    if (fdir.tmr_mismatch) cmd.validity_flags |= 16;
+    if (fdir.tmr_no_majority) cmd.validity_flags |= 32;
+    cmd.tmr_mismatch_count = static_cast<uint16_t>(
+        fdir.tmr_mismatch_count > 65535u ? 65535u : fdir.tmr_mismatch_count);
+    cmd.attitude_valid = state.attitude_valid;
+    if (state.attitude_valid) {
+        math::mrp_from_dcm(state.C_BN, cmd.sigma_BN_est);
+    }
     return cmd;
 }
 

@@ -18,6 +18,8 @@ PACKET_RW_TORQUE_CMD = 1
 PACKET_MTB_DIPOLE_CMD = 2
 PACKET_FSW_STATUS = 3
 PACKET_BOOT_CONFIG = 4
+PACKET_TELECOMMAND = 5
+PACKET_FSW_ATTITUDE = 6
 
 # CommandHeader: uint32 + uint16 + uint16 + uint32 + float = 16 bytes
 COMMAND_HEADER_FMT = "<IHHIf"
@@ -97,7 +99,7 @@ def unpack_command_packet(data: bytes) -> dict:
         raise ValueError(f"CRC mismatch: got 0x{crc:08X}, expected 0x{expected_crc:08X}")
 
     if packet_type == PACKET_FSW_STATUS:
-        mode = data[16]
+        mode, flags, tmr_count, bias = struct.unpack_from("<BBHf", data, 16)
         if mode > 3:
             raise ValueError(f"Unknown FSW mode id {mode}")
         return {
@@ -105,9 +107,16 @@ def unpack_command_packet(data: bytes) -> dict:
             "sequence": sequence,
             "timestamp_s": timestamp_s,
             "mode": mode,
+            "flags": flags,
+            "tmr_mismatch_count": tmr_count,
+            "gyro_bias_degph": bias,
         }
 
-    if packet_type not in (PACKET_RW_TORQUE_CMD, PACKET_MTB_DIPOLE_CMD):
+    if packet_type not in (
+        PACKET_RW_TORQUE_CMD,
+        PACKET_MTB_DIPOLE_CMD,
+        PACKET_FSW_ATTITUDE,
+    ):
         raise ValueError(f"Unknown packet_type {packet_type}")
 
     v0, v1, v2 = struct.unpack_from("<3f", data, 16)

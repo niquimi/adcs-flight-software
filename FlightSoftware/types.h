@@ -38,4 +38,9 @@ struct AttitudeCommand {
     float rw_torque_Nm[3] = {0.f, 0.f, 0.f};
     float mtb_dipole_Am2[3] = {0.f, 0.f, 0.f};
     ModeId active_mode = ModeId::Standby;
+    std::uint8_t validity_flags = 0;
+    std::uint16_t tmr_mismatch_count = 0;
+    float gyro_bias_degph = 0.f;
+    float sigma_BN_est[3] = {0.f, 0.f, 0.f};
+    bool attitude_valid = false;
 };

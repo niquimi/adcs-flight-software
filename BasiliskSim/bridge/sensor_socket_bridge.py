@@ -14,6 +14,7 @@ import numpy as np
 from BasiliskSim.bridge.battery_soc_model import BatterySocModel
 from BasiliskSim.bridge.sil_protocol import (
     COMMAND_PACKET_SIZE,
+    PACKET_FSW_ATTITUDE,
     PACKET_FSW_STATUS,
     PACKET_MTB_DIPOLE_CMD,
     PACKET_RW_TORQUE_CMD,
@@ -23,23 +24,17 @@ from BasiliskSim.bridge.sil_protocol import (
 )
 
 
-COMMAND_LOG_EPSILON = 1e-12
+_MODE_NAMES = ("Standby", "Detumble", "Pointing", "Safe")
+_TM_LOG_INTERVAL_S = 5.0
 
 
-def _normalize3(v: Sequence[float]) -> list[float] | None:
-    n2 = float(v[0]) * float(v[0]) + float(v[1]) * float(v[1]) + float(v[2]) * float(v[2])
-    if n2 < 1e-24:
-        return None
-    inv = 1.0 / math.sqrt(n2)
-    return [float(v[0]) * inv, float(v[1]) * inv, float(v[2]) * inv]
-
-
-def _sub3(a: Sequence[float], b: Sequence[float]) -> tuple[float, float, float]:
-    return (
-        float(a[0]) - float(b[0]),
-        float(a[1]) - float(b[1]),
-        float(a[2]) - float(b[2]),
-    )
+def _att_error_deg(sigma_est: Sequence[float], sigma_true: Sequence[float]) -> float:
+    """Geodesic angle between estimated and plant MRP, degrees."""
+    c_est = np.array(rbk.MRP2C(list(sigma_est)), dtype=float)
+    c_true = np.array(rbk.MRP2C(list(sigma_true)), dtype=float)
+    trace = float(np.trace(c_est @ c_true.T))
+    c = max(-1.0, min(1.0, 0.5 * (trace - 1.0)))
+    return math.degrees(math.acos(c))
 
 
 class SensorSocketBridge(sysModel.SysModel):
@@ -97,20 +92,20 @@ class SensorSocketBridge(sysModel.SysModel):
         self.sock: socket.socket | None = None
         self.rx_buffer = bytearray()
         self.last_sent_ns = 0
-        self._refs_log_ns = -10**18
-        print(
-            "SIL bridge refs: "
-            f"sc={'yes' if sc_state_msg is not None else 'NO'} "
-            f"earth={'yes' if earth_msg is not None else 'NO'} "
-            f"sun={'yes' if sun_msg is not None else 'NO'} "
-            f"mag_msg={'yes' if mag_env_msg is not None else 'NO'} "
-            f"mag_field={'yes' if mag_field is not None else 'NO'}"
-        )
+        self._sigma_true = (0.0, 0.0, 0.0)
+        self._sigma_est: tuple[float, float, float] | None = None
+        self._last_status: dict | None = None
+        self._last_attitude_t = -1.0
+        self._tm_log_s = -_TM_LOG_INTERVAL_S
 
     def Reset(self, currentSimNanos: int) -> int:
         self.last_sent_ns = 0
         self.rx_buffer.clear()
         self._close_socket()
+        self._sigma_est = None
+        self._last_status = None
+        self._last_attitude_t = -1.0
+        self._tm_log_s = -_TM_LOG_INTERVAL_S
 
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -146,7 +141,6 @@ class SensorSocketBridge(sysModel.SysModel):
 
         imu_data = self.imu.sensorOutMsg.read()
         tam_data = self.tam.tamDataOutMsg.read()
-        eclipse_data = self.eclipse_obj.eclipseOutMsgs[0].read()
         css_raw = [css.cssDataOutMsg.read().OutputData for css in self.css_list]
         css_values = list(css_raw[:6]) + [0.0] * max(0, 6 - len(css_raw))
         # Basilisk CSS A=I cannot be set to 0 from Python; add white noise here.
@@ -161,104 +155,12 @@ class SensorSocketBridge(sysModel.SysModel):
         timestamp_s = currentSimNanos * macros.NANO2SEC
         battery_level = self.battery.soc if self.battery is not None else 1.0
 
-        # Inertial references matching Basilisk sensors (not FSW onboard models).
-        # r_BN verification is Earth-centered: SPICE sc.r_BN_N is SSB/sun-centered.
-        sun_N = (0.0, 0.0, 0.0)
-        B_N = (0.0, 0.0, 0.0)
-        r_BN = (0.0, 0.0, 0.0)
-        sigma_BN = (0.0, 0.0, 0.0)
-        ref_err = ""
-        try:
-            r_sc = None
-            if self.sc_state_msg is not None:
-                sc = self.sc_state_msg.read()
-                r_sc = list(sc.r_BN_N)
-                sigma_BN = (
-                    float(sc.sigma_BN[0]),
-                    float(sc.sigma_BN[1]),
-                    float(sc.sigma_BN[2]),
-                )
-                if self.earth_msg is not None:
-                    r_earth = list(self.earth_msg.read().PositionVector)
-                    r_BN = _sub3(r_sc, r_earth)
-                else:
-                    r_BN = (float(r_sc[0]), float(r_sc[1]), float(r_sc[2]))
-                    ref_err += "earth_msg_none;"
-            else:
-                ref_err += "sc_msg_none;"
-            if r_sc is not None and self.sun_msg is not None:
-                sun = self.sun_msg.read()
-                r_sun = list(sun.PositionVector)
-                s_vec = [
-                    float(r_sun[0]) - float(r_sc[0]),
-                    float(r_sun[1]) - float(r_sc[1]),
-                    float(r_sun[2]) - float(r_sc[2]),
-                ]
-                s_hat = _normalize3(s_vec)
-                if s_hat is not None:
-                    sun_N = (s_hat[0], s_hat[1], s_hat[2])
-                else:
-                    ref_err += "sun_norm_fail;"
-            else:
-                ref_err += "sun_msgs_none;"
-            # Mag inertial truth: dipole envOut in N (same model the FSW dipole should match).
-            # Fallback: TAM rotated by truth attitude (includes sensor noise).
-            b_raw = None
-            b_src = ""
-            if self.mag_field is not None and len(self.mag_field.envOutMsgs) > 0:
-                try:
-                    mf = self.mag_field.envOutMsgs[0].read()
-                    b_raw = [float(mf.magField_N[0]), float(mf.magField_N[1]), float(mf.magField_N[2])]
-                    b_src = "envOut"
-                    if _normalize3(b_raw) is None:
-                        b_raw = None
-                        ref_err += "envOut_zero;"
-                except Exception as exc:  # noqa: BLE001
-                    ref_err += f"envOut:{type(exc).__name__};"
-                    b_raw = None
-            if b_raw is None:
-                try:
-                    sc_m = self.sc_state_msg.read() if self.sc_state_msg is not None else None
-                    if sc_m is not None:
-                        C_BN = np.array(rbk.MRP2C(sc_m.sigma_BN), dtype=float)
-                        b_B = np.array(
-                            [float(mag_nt[0]) * 1e-9, float(mag_nt[1]) * 1e-9, float(mag_nt[2]) * 1e-9],
-                            dtype=float,
-                        )
-                        b_N_vec = C_BN.T @ b_B
-                        b_raw = [float(b_N_vec[0]), float(b_N_vec[1]), float(b_N_vec[2])]
-                        b_src = "tam_truth_att"
-                except Exception as exc:  # noqa: BLE001
-                    ref_err += f"tam_truth:{type(exc).__name__};"
-                    b_raw = None
-            if b_raw is None:
-                try:
-                    mf = self.tam.magInMsg.read()
-                    b_raw = [float(mf.magField_N[0]), float(mf.magField_N[1]), float(mf.magField_N[2])]
-                    b_src = "tam_magIn"
-                    if _normalize3(b_raw) is None:
-                        b_raw = None
-                        ref_err += "tam_magIn_zero;"
-                except Exception as exc:  # noqa: BLE001
-                    ref_err += f"tam_magIn:{type(exc).__name__};"
-                    b_raw = None
-            if b_raw is None:
-                ref_err += "mag_unavailable;"
-            else:
-                b_hat = _normalize3(b_raw)
-                if b_hat is not None:
-                    B_N = (b_hat[0], b_hat[1], b_hat[2])
-                    if b_src:
-                        ref_err += f"B_src={b_src};"
-                else:
-                    ref_err += "mag_norm_fail;"
-        except Exception as exc:  # noqa: BLE001 — SIL diagnostics must not drop telemetry
-            ref_err += f"exc:{type(exc).__name__}:{exc};"
-
-        if currentSimNanos - self._refs_log_ns >= macros.sec2nano(2.0):
-            self._refs_log_ns = currentSimNanos
-            print(
-                f"SIL refs t={timestamp_s:.1f}s sun_N={sun_N} B_N={B_N} err='{ref_err}'"
+        if self.sc_state_msg is not None:
+            sc = self.sc_state_msg.read()
+            self._sigma_true = (
+                float(sc.sigma_BN[0]),
+                float(sc.sigma_BN[1]),
+                float(sc.sigma_BN[2]),
             )
 
         packet = pack_sensor_packet(
@@ -279,6 +181,7 @@ class SensorSocketBridge(sysModel.SysModel):
             return super().UpdateState(currentSimNanos)
 
         self.last_sent_ns = currentSimNanos
+        self._poll_commands(currentSimNanos)
         return super().UpdateState(currentSimNanos)
 
     def _poll_commands(self, currentSimNanos: int) -> None:
@@ -299,6 +202,7 @@ class SensorSocketBridge(sysModel.SysModel):
             return
 
         self.rx_buffer.extend(chunk)
+        got_status = False
         while len(self.rx_buffer) >= COMMAND_PACKET_SIZE:
             raw = bytes(self.rx_buffer[:COMMAND_PACKET_SIZE])
             del self.rx_buffer[:COMMAND_PACKET_SIZE]
@@ -308,20 +212,30 @@ class SensorSocketBridge(sysModel.SysModel):
                 print(f"SIL command rejected: {exc}")
                 continue
             self._apply_command(cmd, currentSimNanos)
+            if cmd["packet_type"] == PACKET_FSW_STATUS:
+                got_status = True
+        if got_status:
+            self._maybe_print_tm()
 
     def _apply_command(self, cmd: dict, currentSimNanos: int) -> None:
         packet_type = cmd["packet_type"]
-        seq = cmd["sequence"]
 
         if packet_type == PACKET_FSW_STATUS:
             if self.battery is not None:
                 prev = self.battery.mode
                 self.battery.set_mode_id(cmd["mode"])
                 if self.battery.mode != prev:
+                    name = _MODE_NAMES[cmd["mode"]] if cmd["mode"] < 4 else str(cmd["mode"])
                     print(
-                        f"SIL FSW mode={self.battery.mode} seq={seq} "
+                        f"SIL FSW mode={name} t={cmd['timestamp_s']:.1f}s "
                         f"SOC={self.battery.soc:.3f}"
                     )
+            self._last_status = cmd
+            return
+
+        if packet_type == PACKET_FSW_ATTITUDE:
+            self._sigma_est = cmd["values"]
+            self._last_attitude_t = cmd["timestamp_s"]
             return
 
         values = cmd["values"]
@@ -334,17 +248,6 @@ class SensorSocketBridge(sysModel.SysModel):
             self.rw_cmd_msg.write(self.rw_cmd_data, currentSimNanos)
             if self.battery is not None:
                 self.battery.note_actuator_command(rw_torques=values[:3])
-            if any(abs(value) > COMMAND_LOG_EPSILON for value in values[:3]):
-                soc_info = (
-                    f" | SOC={self.battery.soc:.3f}"
-                    if self.battery is not None
-                    else ""
-                )
-                print(
-                    f"SIL RW torque cmd seq={seq} "
-                    f"u=[{values[0]:+.4f}, {values[1]:+.4f}, {values[2]:+.4f}] Nm"
-                    f"{soc_info}"
-                )
             return
 
         if packet_type == PACKET_MTB_DIPOLE_CMD:
@@ -355,11 +258,41 @@ class SensorSocketBridge(sysModel.SysModel):
             self.mtb_cmd_msg.write(self.mtb_cmd_data, currentSimNanos)
             if self.battery is not None:
                 self.battery.note_actuator_command(mtb_dipoles=values[:3])
-            if any(abs(value) > COMMAND_LOG_EPSILON for value in values[:3]):
-                print(
-                    f"SIL MTB dipole cmd seq={seq} "
-                    f"m=[{values[0]:+.4f}, {values[1]:+.4f}, {values[2]:+.4f}] Am2"
-                )
+
+    def _maybe_print_tm(self) -> None:
+        st = self._last_status
+        if st is None:
+            return
+        t = float(st["timestamp_s"])
+        if t - self._tm_log_s < _TM_LOG_INTERVAL_S:
+            return
+        self._tm_log_s = t
+
+        flags = int(st["flags"])
+        mode = int(st["mode"])
+        name = _MODE_NAMES[mode] if mode < 4 else str(mode)
+        soc = f"{self.battery.soc:.3f}" if self.battery is not None else "?"
+
+        if not (flags & 4):
+            att = "invalid"
+        elif (
+            self._sigma_est is None
+            or abs(self._last_attitude_t - t) > 1e-3
+        ):
+            att = "n/a"
+        else:
+            att = f"{_att_error_deg(self._sigma_est, self._sigma_true):.2f} deg"
+
+        print(
+            f"SIL TM t={t:.1f}s mode={name}"
+            f" Att={att}"
+            f" |b|={st['gyro_bias_degph']:.1f} deg/h"
+            f" TMR={st['tmr_mismatch_count']}"
+            f" flags=0x{flags:02x}"
+            f" css={int(bool(flags & 1))} nadir={int(bool(flags & 2))}"
+            f" att={int(bool(flags & 4))} triad={int(bool(flags & 8))}"
+            f" SOC={soc}"
+        )
 
     def _close_socket(self) -> None:
         if self.sock is not None:

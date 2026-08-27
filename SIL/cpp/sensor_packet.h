@@ -23,7 +23,7 @@ struct SensorPacket {
 #pragma pack(pop)
 
 static_assert(sizeof(SensorPacket) == 56, "SensorPacket must be exactly 56 bytes");
-static_assert(sizeof(float) == 4, "float must be 4 bytes for Python struct '<27f' compatibility");
+static_assert(sizeof(float) == 4, "float must be 4 bytes for Python struct '<14f' compatibility");
 
 constexpr std::size_t kSensorPacketSize = sizeof(SensorPacket);
 constexpr uint16_t kDefaultSilPort = 5557;

@@ -25,6 +25,74 @@ void dcm_from_mrp(const float s[3], float C[9]) {
     C[8] = (4.f * (2.f * s2 * s2 - d1) + S * S) / d;
 }
 
+void mrp_from_dcm(const float C[9], float s[3]) {
+    // Shepperd quaternion (scalar-first) matching Schaub C(q) / dcm_from_mrp.
+    float q0 = 0.f;
+    float q1 = 0.f;
+    float q2 = 0.f;
+    float q3 = 0.f;
+    const float c00 = C[0];
+    const float c11 = C[4];
+    const float c22 = C[8];
+    const float tr = c00 + c11 + c22;
+
+    if (tr > c00 && tr > c11 && tr > c22) {
+        const float r = std::sqrt(std::fmax(0.f, 1.f + tr));
+        const float inv = (r > 1.0e-12f) ? (0.5f / r) : 0.f;
+        q0 = 0.5f * r;
+        q1 = (C[5] - C[7]) * inv;
+        q2 = (C[6] - C[2]) * inv;
+        q3 = (C[1] - C[3]) * inv;
+    } else if (c00 >= c11 && c00 >= c22) {
+        const float r = std::sqrt(std::fmax(0.f, 1.f + c00 - c11 - c22));
+        const float inv = (r > 1.0e-12f) ? (0.5f / r) : 0.f;
+        q1 = 0.5f * r;
+        q0 = (C[5] - C[7]) * inv;
+        q2 = (C[1] + C[3]) * inv;
+        q3 = (C[2] + C[6]) * inv;
+    } else if (c11 >= c22) {
+        const float r = std::sqrt(std::fmax(0.f, 1.f + c11 - c00 - c22));
+        const float inv = (r > 1.0e-12f) ? (0.5f / r) : 0.f;
+        q2 = 0.5f * r;
+        q0 = (C[6] - C[2]) * inv;
+        q1 = (C[1] + C[3]) * inv;
+        q3 = (C[5] + C[7]) * inv;
+    } else {
+        const float r = std::sqrt(std::fmax(0.f, 1.f + c22 - c00 - c11));
+        const float inv = (r > 1.0e-12f) ? (0.5f / r) : 0.f;
+        q3 = 0.5f * r;
+        q0 = (C[1] - C[3]) * inv;
+        q1 = (C[2] + C[6]) * inv;
+        q2 = (C[5] + C[7]) * inv;
+    }
+
+    if (q0 < 0.f) {
+        q0 = -q0;
+        q1 = -q1;
+        q2 = -q2;
+        q3 = -q3;
+    }
+
+    const float den = 1.f + q0;
+    if (den < 1.0e-12f) {
+        s[0] = q1;
+        s[1] = q2;
+        s[2] = q3;
+        return;
+    }
+    s[0] = q1 / den;
+    s[1] = q2 / den;
+    s[2] = q3 / den;
+
+    const float ss = s[0] * s[0] + s[1] * s[1] + s[2] * s[2];
+    if (ss > 1.f) {
+        const float invs = -1.f / ss;
+        s[0] *= invs;
+        s[1] *= invs;
+        s[2] *= invs;
+    }
+}
+
 void dcm_reorthogonalize(float C[9]) {
     float r0[3] = {C[0], C[1], C[2]};
     if (!vec3_normalize(r0, r0, 1.0e-12f)) {

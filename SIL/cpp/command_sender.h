@@ -16,4 +16,7 @@ bool sendRwTorque(socket_t sock, float timestamp_s, const float torque_Nm[3]);
 bool sendMtbDipole(socket_t sock, float timestamp_s, const float dipole_Am2[3]);
 
 /** Pack and send an FswStatusCommand (32 bytes) with the active FSW mode. */
-bool sendFswStatus(socket_t sock, float timestamp_s, ModeId mode);
+bool sendFswStatus(socket_t sock, float timestamp_s, const AttitudeCommand& cmd);
+
+/** Pack and send an FswAttitudeCommand (32 bytes) with estimated MRP. */
+bool sendFswAttitude(socket_t sock, float timestamp_s, const float sigma_BN[3]);

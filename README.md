@@ -71,7 +71,7 @@ flowchart TB
     Modes --> RW[Reaction-wheel torque]
 ```
 
-Onboard chain (truth vectors in the SIL packet are logs only):
+Onboard chain (plant truth is not on the sensor packet):
 
 - CSS → unit sun in body
 - Kepler two-body `r_BN` from mission elements → nadir
@@ -81,20 +81,16 @@ Onboard chain (truth vectors in the SIL packet are logs only):
 
 ## Verification (SIL vs Basilisk truth)
 
-The sensor packet carries **verification fields** (`sigma_BN`, `r_BN`, `sun_N`, `B_N`, …) that the onboard estimator must **not** use. They exist only so `sensor_receiver.exe` can compare the FSW state to Basilisk truth every 5 s (`printEstCompare` in `flight_software.cpp`).
+Plant truth stays in Basilisk. The FSW downlinks estimated MRP (`PACKET_FSW_ATTITUDE`) and status (`mode`, flags, TMR, `|b|`). The Python bridge compares FSW MRP to `sc.sigma_BN` and prints one `SIL TM` line every 5 s of sim time — not actuator commands.
 
 ```text
-Est t=... |dr|=... m  SunN=... MagN=...  SunB=... MagB=...
-          TRIAD=... Att=... |b|=... deg/h  NadirN=... NadirB=...
+SIL TM t=...s mode=Pointing Att=0.32 deg |b|=35.2 deg/h TMR=0 flags=0x0f css=1 nadir=1 att=1 triad=1 SOC=0.550
 ```
 
 | Metric | Meaning | Typical demo (`detumble_to_pointing`, sunlight) |
 |---|---|---|
-| **Att** | Geodesic angle between filtered `C_BN` and truth DCM | **&lt; 0.5°** after filter settle |
-| **NadirB** | Nadir direction in body vs truth (Pointing nadir) | **&lt; 0.2°** when `Mode=Pointing` |
-| **\|b\|** | Estimated gyro bias norm | Converges to **~36 deg/h** (planted IMU bias 0.01 °/s) |
-| **SunB / MagB** | CSS / TAM body vectors vs truth | **&lt; 1°** in sun (MagB noisier from TAM) |
-| **\|dr\|** | Kepler `r_BN` vs sim truth | **~1–2 m** (two-body demo orbit) |
+| **Att** | Geodesic angle between filtered `C_BN` (as MRP) and plant `sigma_BN` | **&lt; 0.5°** after filter settle |
+| **\|b\|** | Estimated gyro bias norm from the status packet | Converges to **~36 deg/h** (planted IMU bias 0.01 °/s) |
 | **‖ω‖** | Body rate from gyro − `b̂` | Detumble **&gt; 0.015 → &lt; 0.005 rad/s** before Pointing |
 
 **Control:** after boot Standby (60 s in the default demo), expect **Standby → Detumble → Pointing** on the `Mode=` console line and Vizard FSW-mode bar. Pointing does not re-enter Detumble on rate alone — only **Standby** and **Safe** (on exit) use the 0.015 rad/s tumble threshold.
@@ -105,7 +101,7 @@ Offline sensor plots (no Vizard): run with `log_sensors=True`, `show_plots=True`
 
 ## Exercising the FSW
 
-Basilisk is the LEO SSO plant (sensors, wheels, eclipse, demo battery). SIL is only the link: 108-byte sensors in, 32-byte commands out (RW, optional MTB, and `ModeId` every cycle).
+Basilisk is the LEO SSO plant (sensors, wheels, eclipse, demo battery). SIL is only the link: 56-byte sensors in, 32-byte commands out (status, estimated MRP, RW, optional MTB).
 
 ```mermaid
 flowchart LR
@@ -122,8 +118,8 @@ flowchart LR
     subgraph fsw [Flight software]
         Step["FlightSoftware::step"]
     end
-    Sensors -->|SensorPacket 108 B| TCP --> Inj --> Step
-    Step -->|RW / MTB / ModeId| TCP
+    Sensors -->|SensorPacket 56 B| TCP --> Inj --> Step
+    Step -->|status / MRP / RW / MTB| TCP
     TCP --> Plant
     TCP -->|ModeId| SOC
     SOC --> Viz

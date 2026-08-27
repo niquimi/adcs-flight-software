@@ -160,8 +160,12 @@ int main() {
         // Single FSW entry point — modes/control live inside step().
         const AttitudeCommand cmd = fsw.step(sensors);
 
-        if (!sendFswStatus(clientSocket, sensors.timestamp_s, cmd.active_mode)) {
+        if (!sendFswStatus(clientSocket, sensors.timestamp_s, cmd)) {
             std::cerr << "sendFswStatus failed\n";
+            break;
+        }
+        if (!sendFswAttitude(clientSocket, sensors.timestamp_s, cmd.sigma_BN_est)) {
+            std::cerr << "sendFswAttitude failed\n";
             break;
         }
         if (cmd.apply_rw) {
