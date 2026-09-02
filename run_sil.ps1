@@ -26,6 +26,9 @@ if (-not (Test-Path $Python)) {
     Write-Error "Python venv not found at $Python. Create it first (see README)."
 }
 
+Write-Host '==> Opening CMD with tc_terminal.py (telecommands on :5558)'
+Start-Process cmd.exe -ArgumentList '/k', "cd /d `"$Root`" && `"$Python`" .\SIL\tc_terminal.py"
+
 Write-Host '==> Opening CMD with basic_orbit_vizard.py'
 Start-Process cmd.exe -ArgumentList '/k', "cd /d `"$Root`" && `"$Python`" .\BasiliskSim\scenarios\basic_orbit_vizard.py"
 
@@ -39,4 +42,4 @@ if ([string]::IsNullOrWhiteSpace($Vizard)) {
     Start-Process $Vizard -WorkingDirectory (Split-Path $Vizard)
 }
 
-Write-Host 'Done. sensor_receiver and Basilisk are running.'
+Write-Host 'Done. sensor_receiver, tc_terminal, and Basilisk are running.'

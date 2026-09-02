@@ -28,6 +28,9 @@ public:
     /** Hold Standby until timestamp_s reaches this (launcher separation). 0 = off. */
     void setBootStandbyDuration(float duration_s);
 
+    /** Operator telecommand. SIL-only inject is handled outside this class. */
+    void applyTelecommand(std::uint8_t opcode, std::uint8_t arg0, std::uint8_t arg1);
+
 #ifdef ADCS_ENABLE_FAULT_INJECTION
     ModeId& silModeReplica(int i);
 #endif
@@ -54,4 +57,6 @@ private:
     float lastOrbitLog_s_ = -kOrbitLogInterval_s;
     float bootStandbyDuration_s_ = 0.f;
     bool bootHoldLogged_ = false;
+    bool mode_forced_ = false;
+    ModeId forced_mode_ = ModeId::Standby;
 };

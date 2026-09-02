@@ -5,10 +5,25 @@
 #include "flight_software.h"
 #include "sensor_packet.h"
 #include "sensor_receiver.h"
+#include "telecommand_link.h"
 #include "types.h"
 #include "fault_injector.h"
 
 #include <iostream>
+#include <vector>
+
+namespace {
+
+void logTelecommands(const std::vector<TelecommandPacket>& packets) {
+    for (const TelecommandPacket& tc : packets) {
+        std::cout << "TC recv opcode=" << static_cast<unsigned>(tc.opcode)
+                  << " arg0=" << static_cast<unsigned>(tc.arg0)
+                  << " arg1=" << static_cast<unsigned>(tc.arg1)
+                  << " t=" << tc.header.timestamp_s << " s\n";
+    }
+}
+
+}  // namespace
 
 bool recvExact(socket_t sock, char* buffer, std::size_t size) {
     std::size_t received = 0;
@@ -113,12 +128,22 @@ int main() {
         return 1;
     }
 
+    TelecommandLink tcLink;
+    if (!tcLink.listen(kDefaultTcPort)) {
+        closeSocket(serverSocket);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return 1;
+    }
+
     std::cout << "SIL listening on 127.0.0.1:" << kDefaultSilPort << "\n";
     std::cout << "Waiting for Basilisk bridge connection...\n";
 
     const socket_t clientSocket = accept(serverSocket, nullptr, nullptr);
     if (clientSocket == kInvalidSocket) {
         std::cerr << "accept() failed\n";
+        tcLink.close();
         closeSocket(serverSocket);
 #ifdef _WIN32
         WSACleanup();
@@ -136,6 +161,7 @@ int main() {
         std::cerr << "receiveBootConfig failed (expected 32 B PACKET_BOOT_CONFIG)\n";
         closeSocket(clientSocket);
         closeSocket(serverSocket);
+        tcLink.close();
 #ifdef _WIN32
         WSACleanup();
 #endif
@@ -153,6 +179,18 @@ int main() {
         if (!receiveSensorPacket(clientSocket, sensors)) {
             std::cout << "Client disconnected.\n";
             break;
+        }
+
+        std::vector<TelecommandPacket> tcs;
+        tcLink.poll(tcs);
+        logTelecommands(tcs);
+
+        for (const auto& tc : tcs) {
+            if (tc.opcode == TC_INJECT_FAULT) {
+                injector.fire(tc.arg0, sensors, fsw);
+            } else if (tc.opcode != TC_IDLE) {
+                fsw.applyTelecommand(tc.opcode, tc.arg0, tc.arg1);
+            }
         }
 
         injector.apply(sensors, fsw);
@@ -184,6 +222,7 @@ int main() {
 
     closeSocket(clientSocket);
     closeSocket(serverSocket);
+    tcLink.close();
 #ifdef _WIN32
     WSACleanup();
 #endif

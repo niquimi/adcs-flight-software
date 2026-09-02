@@ -13,6 +13,7 @@ add_executable(
     command_sender.cpp
     fault_injector.cpp
     boot_config_receiver.cpp
+    telecommand_link.cpp
     ${FSW_ROOT}/flight_software.cpp
     ${FSW_ROOT}/mode_director.cpp
     ${FSW_ROOT}/eps/eps_manager.cpp

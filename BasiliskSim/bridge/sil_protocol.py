@@ -53,6 +53,32 @@ def pack_boot_config(boot_standby_s: float) -> bytes:
     return body + struct.pack("<I", crc32(body))
 
 
+def pack_telecommand(
+    opcode: int,
+    arg0: int = 0,
+    arg1: int = 0,
+    timestamp_s: float = 0.0,
+    sequence: int = 0,
+) -> bytes:
+    """32-byte operator TC (PACKET_TELECOMMAND) for the :5558 console link."""
+    header = struct.pack(
+        COMMAND_HEADER_FMT,
+        COMMAND_HEALTH_CHECK,
+        PACKET_VERSION,
+        PACKET_TELECOMMAND,
+        int(sequence) & 0xFFFFFFFF,
+        float(timestamp_s),
+    )
+    payload = struct.pack(
+        "<BBB9x",
+        int(opcode) & 0xFF,
+        int(arg0) & 0xFF,
+        int(arg1) & 0xFF,
+    )
+    body = header + payload
+    return body + struct.pack("<I", crc32(body))
+
+
 def pack_sensor_packet(
     timestamp_s: float,
     gyro: Sequence[float] | list[float],

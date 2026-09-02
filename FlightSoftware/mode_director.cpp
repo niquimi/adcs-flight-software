@@ -12,6 +12,10 @@ ModeId ModeDirector::selectNextMode(const Input& in) const {
         return ModeId::Safe;
     }
 
+    if (in.mode_forced) {
+        return in.forced_mode;
+    }
+
     const float rate = in.rate_radps;
     const bool ref_ok = in.ref_ok;
 

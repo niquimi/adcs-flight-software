@@ -1,4 +1,5 @@
 #include "flight_software.h"
+#include "command_packets.h"
 
 #include "math/attitude.h"
 #include "math/mat3.h"
@@ -23,6 +24,8 @@ void FlightSoftware::reset() {
     lastOrbitLog_s_ = -kOrbitLogInterval_s;
     bootHoldLogged_ = false;
     state_estimator_.reset();
+    mode_forced_ = false;
+    forced_mode_ = ModeId::Standby;
 }
 
 void FlightSoftware::setBootStandbyDuration(float duration_s) {
@@ -73,6 +76,8 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
     in.rates_settled = detumble_.ratesSettled();
     in.force_safe = force_safe;
     in.allow_exit_safe = allow_exit_safe;
+    in.mode_forced = mode_forced_;
+    in.forced_mode = forced_mode_;
 
     const ModeId next = director_.selectNextMode(in);
     if (next != active_->id()) {
@@ -94,6 +99,7 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
     if (state.triad_valid) cmd.validity_flags |= 8;
     if (fdir.tmr_mismatch) cmd.validity_flags |= 16;
     if (fdir.tmr_no_majority) cmd.validity_flags |= 32;
+    if (mode_forced_) cmd.validity_flags |= 64;
     cmd.tmr_mismatch_count = static_cast<uint16_t>(
         fdir.tmr_mismatch_count > 65535u ? 65535u : fdir.tmr_mismatch_count);
     cmd.attitude_valid = state.attitude_valid;
@@ -126,6 +132,50 @@ void FlightSoftware::modeFor(ModeId id) {
             break;
         case ModeId::Pointing:
             active_ = &pointing_;
+            break;
+    }
+}
+
+void FlightSoftware::applyTelecommand(std::uint8_t opcode, std::uint8_t arg0,
+                                      std::uint8_t /*arg1*/) {
+    switch (opcode) {
+        case TC_FORCE_MODE:
+            if (arg0 > static_cast<std::uint8_t>(ModeId::Safe)) {
+                break;
+            }
+            mode_forced_ = true;
+            forced_mode_ = static_cast<ModeId>(arg0);
+            break;
+
+        case TC_CLEAR_FORCE:
+            mode_forced_ = false;
+            break;
+
+        case TC_CLEAR_FAULTS:
+            fdir_.reset(active_->id());
+            break;
+
+        case TC_SET_POINTING_TARGET:
+            if (arg0 == 0) {
+                pointing_.setTarget(PointingTarget::Sun);
+            } else if (arg0 == 1) {
+                pointing_.setTarget(PointingTarget::Nadir);
+            }
+            break;
+
+        case TC_RESET_ESTIMATOR:
+            state_estimator_.reset();
+            break;
+
+        case TC_SET_GAINS:
+        case TC_SET_THRESHOLDS:
+            break;
+
+        case TC_RESET_FSW:
+            reset();
+            break;
+
+        default:
             break;
     }
 }

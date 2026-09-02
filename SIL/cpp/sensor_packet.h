@@ -27,3 +27,4 @@ static_assert(sizeof(float) == 4, "float must be 4 bytes for Python struct '<14f
 
 constexpr std::size_t kSensorPacketSize = sizeof(SensorPacket);
 constexpr uint16_t kDefaultSilPort = 5557;
+constexpr uint16_t kDefaultTcPort = 5558;

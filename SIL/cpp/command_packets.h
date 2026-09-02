@@ -51,7 +51,7 @@ struct FswAttitudeCommand {
 
 struct TelecommandPacket {
     CommandHeader header;
-    uint8_t opcode;   // 0 idle, 1 ForceMode, 2 InjectFault, 3 ClearForce
+    uint8_t opcode;   // TelecommandOpcode 0..9
     uint8_t arg0;
     uint8_t arg1;
     uint8_t reserved[9];
@@ -62,8 +62,14 @@ static_assert(sizeof(TelecommandPacket) == 32);
 enum TelecommandOpcode : uint8_t {
     TC_IDLE = 0,
     TC_FORCE_MODE = 1,
-    TC_INJECT_FAULT = 2,  // arg0: 1 = ModeId replica, 2 = SOC 0.10
-    TC_CLEAR_FORCE = 3,
+    TC_CLEAR_FORCE = 2,
+    TC_INJECT_FAULT = 3,  // arg0: 1 = ModeId replica, 2 = SOC 0.10
+    TC_CLEAR_FAULTS = 4,
+    TC_SET_POINTING_TARGET = 5,
+    TC_RESET_ESTIMATOR = 6,
+    TC_SET_GAINS = 7,
+    TC_SET_THRESHOLDS = 8,
+    TC_RESET_FSW = 9,
 };
 
 #pragma pack(pop)
@@ -96,5 +102,6 @@ constexpr std::size_t kRWTorqueComandSize = sizeof(RWTorqueCommand);
 constexpr std::size_t kMTBDipoleCommandSize = sizeof(MTBDipoleCommand);
 constexpr std::size_t kFswStatusCommandSize = sizeof(FswStatusCommand);
 constexpr std::size_t kFswAttitudeCommandSize = sizeof(FswAttitudeCommand);
+constexpr std::size_t kTelecommandPacketSize = sizeof(TelecommandPacket);
 
 constexpr std::size_t kCommandHeaderSize = sizeof(CommandHeader);

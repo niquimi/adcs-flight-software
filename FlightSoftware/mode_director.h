@@ -13,6 +13,8 @@ public:
         bool rates_settled;
         bool force_safe;
         bool allow_exit_safe;
+        bool mode_forced;
+        ModeId forced_mode;
     };
 
     ModeId selectNextMode(const Input& in) const;

@@ -113,12 +113,14 @@ flowchart LR
     end
     subgraph sil [SIL]
         TCP[TCP :5557]
+        TC[TCP :5558]
         Inj[FaultInjector]
     end
     subgraph fsw [Flight software]
         Step["FlightSoftware::step"]
     end
     Sensors -->|SensorPacket 56 B| TCP --> Inj --> Step
+    TC -->|TelecommandPacket| Step
     Step -->|status / MRP / RW / MTB| TCP
     TCP --> Plant
     TCP -->|ModeId| SOC
@@ -129,10 +131,10 @@ flowchart LR
 | Piece | Role |
 |---|---|
 | `FlightSoftware/` | ADCS, mode director, EPS, FDIR TMR (`step` once per packet) |
-| `SIL/cpp/` | TCP server, packed protocol, CRC-32, optional fault injection |
+| `SIL/cpp/` | TCP server (`:5557` plant, `:5558` TCs), packed protocol, CRC-32, optional fault injection |
 | `BasiliskSim/` | Plant, SOC, Vizard, Python bridge |
 
-Ports: **5556** Vizard DirectComm, **5557** SIL duplex.
+Ports: **5556** Vizard DirectComm, **5557** SIL duplex, **5558** operator TCs (`SIL/tc_terminal.py`).
 
 ```powershell
 py -3.11 -m venv .venv
@@ -157,7 +159,7 @@ BasiliskSim/        Dynamics environment (plant, SOC, Vizard)
 
 ## Limitations (demo)
 
-- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only. FDIR TMR protects `ModeId` and director flags. SIL can inject a one-shot `ModeId` replica bit-flip or SOC drop (`ADCS_INJECT_MODE_AT` / `ADCS_INJECT_SOC_AT`; see [SIL](SIL/README.md#fault-injection-sil-only)). No sensor-range detectors or mismatch telemetry on the SIL packet yet.
+- Demo battery in Basilisk (mode + `|τ|` load, small capacity so SOC moves in 1–2 orbits). Onboard EPS is SOC policy only. FDIR TMR protects `ModeId` and director flags. SIL can inject a one-shot `ModeId` replica bit-flip or SOC drop (`ADCS_INJECT_MODE_AT` / `ADCS_INJECT_SOC_AT`, or `inject` on `:5558`; see [SIL](SIL/README.md#fault-injection-sil-only)). Operator TCs (`force` / `unforce` / …) are on `:5558`; `SET_GAINS` / `SET_THRESHOLDS` are no-ops. No sensor-range detectors yet.
 - Detumble on reaction wheels only; magnetorquers are in the plant but unused.
 - Pointing is two-axis (no yaw / ground-track constraint).
 - Orbit / sun / mag models match this scenario, not GPS/TLE or full-order IGRF.

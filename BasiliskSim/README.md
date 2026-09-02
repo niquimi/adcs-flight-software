@@ -82,9 +82,10 @@ Default `basic_orbit_vizard.py` starts in SIL:
 The Python bridge uses **one socket** at `127.0.0.1:5557`: it sends 56-byte sensor
 frames and receives 32-byte commands (status, estimated MRP, RW, MTB). Every 5 s
 of sim time it prints `SIL TM` (mode, Att vs plant truth, `|b|`, TMR, flags, SOC).
-RW/MTB torques are applied but not printed.
+RW/MTB torques are applied but not printed. Operator TCs are **not** on this
+socket; use `:5558` and [`SIL/tc_terminal.py`](../SIL/tc_terminal.py).
 
-Ports: `5556` Vizard, `5557` SIL bidirectional.
+Ports: `5556` Vizard, `5557` SIL plant, `5558` telecommands.
 
 Bridge modules: `BasiliskSim/bridge/` (`sensor_socket_bridge.py`, `sil_protocol.py`, `battery_soc_model.py`).
 
