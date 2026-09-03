@@ -40,6 +40,7 @@ private:
     ModeDirector director_;
     EpsManager eps_;
     FdirManager fdir_;
+    HealthMonitor health_;
 
     DetumbleMode detumble_;
     StandbyMode standby_;
@@ -59,4 +60,7 @@ private:
     bool bootHoldLogged_ = false;
     bool mode_forced_ = false;
     ModeId forced_mode_ = ModeId::Standby;
+    std::uint8_t last_tc_opcode_ = 0;
+    std::uint8_t last_tc_arg0_ = 0;
+    std::uint8_t health_event_count_ = 0;
 };

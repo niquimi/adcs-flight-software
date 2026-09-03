@@ -28,25 +28,35 @@ void StateEstimator::reset() {
     attitude_filter_.reset();
 }
 
-SpacecraftState StateEstimator::update(const SensorPacket& sensors) {
+SpacecraftState StateEstimator::update(const SensorPacket& sensors, const SensorGate& gate) {
     SpacecraftState state;
     state.timestamp_s = sensors.timestamp_s;
-    state.omega_radps[0] = sensors.gyro_x;
-    state.omega_radps[1] = sensors.gyro_y;
-    state.omega_radps[2] = sensors.gyro_z;
-    const float css_raw[6] = {
-        sensors.css_px,
-        sensors.css_mx,
-        sensors.css_py,
-        sensors.css_my,
-        sensors.css_pz,
-        sensors.css_mz,
-    };
-    state.css_valid = css_wls_.update(css_raw, state.css);
-    state.mag[0] = sensors.mag_x;
-    state.mag[1] = sensors.mag_y;
-    state.mag[2] = sensors.mag_z;
     state.batteryLevel = sensors.batteryLevel;
+
+    if (gate.use_gyro) {
+        state.omega_radps[0] = sensors.gyro_x;
+        state.omega_radps[1] = sensors.gyro_y;
+        state.omega_radps[2] = sensors.gyro_z;
+    }
+
+    if (gate.use_css) {
+        const float css_raw[6] = {
+            sensors.css_px,
+            sensors.css_mx,
+            sensors.css_py,
+            sensors.css_my,
+            sensors.css_pz,
+            sensors.css_mz,
+        };
+        state.css_valid = css_wls_.update(css_raw, state.css);
+    }
+
+    if (gate.use_mag) {
+        state.mag[0] = sensors.mag_x;
+        state.mag[1] = sensors.mag_y;
+        state.mag[2] = sensors.mag_z;
+    }
+    
     orbit_propagator_.update(sensors.timestamp_s, state.r_BN_N);
     sun_model_.update(sensors.timestamp_s, state.sun_N);
     dipole_mag_model_.update(sensors.timestamp_s, state.r_BN_N, state.B_N);
@@ -71,10 +81,11 @@ SpacecraftState StateEstimator::update(const SensorPacket& sensors) {
     );
     attitude_filter_.gyroBias(state.gyro_bias);
 
-    state.omega_radps[0] -= state.gyro_bias[0];
-    state.omega_radps[1] -= state.gyro_bias[1];
-    state.omega_radps[2] -= state.gyro_bias[2];
-    
+    if (gate.use_gyro) {
+        state.omega_radps[0] -= state.gyro_bias[0];
+        state.omega_radps[1] -= state.gyro_bias[1];
+        state.omega_radps[2] -= state.gyro_bias[2];
+    }
     setNadir(state);
     return state;
 }

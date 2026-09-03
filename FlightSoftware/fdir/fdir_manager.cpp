@@ -60,9 +60,12 @@ void FdirManager::readFlags(bool& force_safe, bool& allow_exit_safe, bool& ref_o
     }
 }
 
-FdirReport FdirManager::evaluate(const SpacecraftState&, ModeId) const {
+FdirReport FdirManager::evaluate(const HealthReport& h) const {
     FdirReport r;
-    r.force_safe = tmr_no_majority_;
+    r.force_safe = tmr_no_majority_ || h.dt_back || h.gyro_oor || h.att_stale;
+    r.gate.use_gyro = !(h.dt_back || h.dt_skip || h.gyro_oor);
+    r.gate.use_mag = !(h.dt_back || h.mag_oor);
+    r.gate.use_css = !(h.dt_back || h.css_range || h.css_incoh);
     r.tmr_mismatch = tmr_mismatch_;
     r.tmr_no_majority = tmr_no_majority_;
     r.tmr_mismatch_count = tmr_mismatch_count_;

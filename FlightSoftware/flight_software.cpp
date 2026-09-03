@@ -5,6 +5,8 @@
 #include "math/mat3.h"
 #include "math/vec3.h"
 
+#include "tm/tm_snapshot.h"
+
 #include <iostream>
 
 #ifdef ADCS_ENABLE_FAULT_INJECTION
@@ -21,11 +23,15 @@ void FlightSoftware::reset() {
     active_ = &standby_;
     active_->enter();
     fdir_.reset(ModeId::Standby);
+    health_.reset();
     lastOrbitLog_s_ = -kOrbitLogInterval_s;
     bootHoldLogged_ = false;
     state_estimator_.reset();
     mode_forced_ = false;
     forced_mode_ = ModeId::Standby;
+    last_tc_opcode_ = 0;
+    last_tc_arg0_ = 0;
+    health_event_count_ = 0;
 }
 
 void FlightSoftware::setBootStandbyDuration(float duration_s) {
@@ -33,7 +39,14 @@ void FlightSoftware::setBootStandbyDuration(float duration_s) {
 }
 
 AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
-    SpacecraftState state = state_estimator_.update(sensors);
+    const HealthReport health = health_.evaluateSensors(sensors);
+    const ModeId current = fdir_.votedMode();
+    FdirReport fdir = fdir_.evaluate(health);
+
+    SpacecraftState state = state_estimator_.update(sensors, fdir.gate);
+    health_.noteAttitude(state.attitude_valid);
+    health_.report().flags();
+    fdir.force_safe = fdir.force_safe || health_.report().att_stale;
 
     if (bootStandbyDuration_s_ > 0.f && !bootHoldLogged_
         && state.timestamp_s < bootStandbyDuration_s_) {
@@ -42,8 +55,6 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
         bootHoldLogged_ = true;
     }
 
-    // Vote persistant ModeId
-    const ModeId current = fdir_.votedMode();
     if (current != active_->id()) {
         active_->exit();
         modeFor(current);
@@ -63,7 +74,6 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
     bool ref_ok = false;
     fdir_.readFlags(force_safe, allow_exit_safe, ref_ok);
 
-    const FdirReport fdir = fdir_.evaluate(state, current);
     force_safe = force_safe || fdir.force_safe;
     allow_exit_safe = allow_exit_safe && !fdir.force_safe;
 
@@ -91,21 +101,11 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
 
     AttitudeCommand cmd = active_->update(state);
     cmd.active_mode = active_->id();
-    cmd.gyro_bias_degph = math::vec3_norm(state.gyro_bias) * math::kRad2Deg * 3600.f;
-    cmd.validity_flags = 0;
-    if (state.css_valid) cmd.validity_flags |= 1;
-    if (state.nadir_valid) cmd.validity_flags |= 2;
-    if (state.attitude_valid) cmd.validity_flags |= 4;
-    if (state.triad_valid) cmd.validity_flags |= 8;
-    if (fdir.tmr_mismatch) cmd.validity_flags |= 16;
-    if (fdir.tmr_no_majority) cmd.validity_flags |= 32;
-    if (mode_forced_) cmd.validity_flags |= 64;
-    cmd.tmr_mismatch_count = static_cast<uint16_t>(
-        fdir.tmr_mismatch_count > 65535u ? 65535u : fdir.tmr_mismatch_count);
-    cmd.attitude_valid = state.attitude_valid;
-    if (state.attitude_valid) {
-        math::mrp_from_dcm(state.C_BN, cmd.sigma_BN_est);
+    const std::uint8_t hf = health_.report().flags();
+    if (hf != 0 && health_event_count_ < 255) {
+        ++health_event_count_;
     }
+    fillTm(cmd, state, fdir, mode_forced_, health_.report(), last_tc_opcode_, last_tc_arg0_, health_event_count_);
     return cmd;
 }
 
@@ -136,8 +136,10 @@ void FlightSoftware::modeFor(ModeId id) {
     }
 }
 
-void FlightSoftware::applyTelecommand(std::uint8_t opcode, std::uint8_t arg0,
-                                      std::uint8_t /*arg1*/) {
+void FlightSoftware::applyTelecommand(std::uint8_t opcode, std::uint8_t arg0, std::uint8_t arg1) {
+    last_tc_opcode_ = opcode;
+    last_tc_arg0_ = arg0;
+
     switch (opcode) {
         case TC_FORCE_MODE:
             if (arg0 > static_cast<std::uint8_t>(ModeId::Safe)) {
@@ -153,6 +155,7 @@ void FlightSoftware::applyTelecommand(std::uint8_t opcode, std::uint8_t arg0,
 
         case TC_CLEAR_FAULTS:
             fdir_.reset(active_->id());
+            health_.reset();
             break;
 
         case TC_SET_POINTING_TARGET:

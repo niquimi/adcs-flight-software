@@ -8,13 +8,14 @@
 #include "triad.h"
 #include "css_wls.h"
 #include "attitude_filter.h"
+#include "fdir/fdir_manager.h"
 
 /** Raw sensors + onboard models → SpacecraftState. */
 class StateEstimator {
 public:
     void reset();
 
-    SpacecraftState update(const SensorPacket& sensors);
+    SpacecraftState update(const SensorPacket& sensors, const SensorGate& gate);
 
 private:
     OrbitPropagator orbit_propagator_;
