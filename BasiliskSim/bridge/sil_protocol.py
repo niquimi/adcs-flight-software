@@ -125,7 +125,9 @@ def unpack_command_packet(data: bytes) -> dict:
         raise ValueError(f"CRC mismatch: got 0x{crc:08X}, expected 0x{expected_crc:08X}")
 
     if packet_type == PACKET_FSW_STATUS:
-        mode, flags, tmr_count, bias = struct.unpack_from("<BBHf", data, 16)
+        mode, flags, tmr_count, bias, health_flags, last_tc, last_arg0, health_n = (
+            struct.unpack_from("<BBHfBBBB", data, 16)
+        )
         if mode > 3:
             raise ValueError(f"Unknown FSW mode id {mode}")
         return {
@@ -136,6 +138,10 @@ def unpack_command_packet(data: bytes) -> dict:
             "flags": flags,
             "tmr_mismatch_count": tmr_count,
             "gyro_bias_degph": bias,
+            "health_flags": health_flags,
+            "last_tc_opcode": last_tc,
+            "last_tc_arg0": last_arg0,
+            "health_event_count": health_n,
         }
 
     if packet_type not in (

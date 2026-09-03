@@ -78,6 +78,10 @@ bool sendFswStatus(socket_t sock, float timestamp_s, const AttitudeCommand& cmd)
     packet.flags = cmd.validity_flags;
     packet.tmr_mismatch_count = cmd.tmr_mismatch_count;
     packet.gyro_bias_degph = cmd.gyro_bias_degph;
+    packet.health_flags = cmd.health_flags;
+    packet.last_tc_opcode = cmd.last_tc_opcode;
+    packet.last_tc_arg0 = cmd.last_tc_arg0;
+    packet.health_event_count = cmd.health_event_count;
 
     packet.crc32 = crc32util::compute(
         &packet,

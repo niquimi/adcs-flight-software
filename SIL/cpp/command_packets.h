@@ -32,7 +32,11 @@ struct FswStatusCommand {
 
     uint16_t tmr_mismatch_count;
     float gyro_bias_degph;
-    uint8_t pad[4];
+    uint8_t health_flags;
+    uint8_t last_tc_opcode;
+    uint8_t last_tc_arg0;
+    uint8_t health_event_count;
+
     uint32_t crc32;
 };
 

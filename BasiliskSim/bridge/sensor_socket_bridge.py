@@ -292,6 +292,9 @@ class SensorSocketBridge(sysModel.SysModel):
             f" css={int(bool(flags & 1))} nadir={int(bool(flags & 2))}"
             f" att={int(bool(flags & 4))} triad={int(bool(flags & 8))}"
             f" SOC={soc}"
+            f" health=0x{int(st.get('health_flags', 0)):02x}"
+            f" ack={int(st.get('last_tc_opcode', 0))},{int(st.get('last_tc_arg0', 0))}"
+            f" nH={int(st.get('health_event_count', 0))}"
         )
 
     def _close_socket(self) -> None:

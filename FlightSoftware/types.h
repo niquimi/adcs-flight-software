@@ -40,6 +40,10 @@ struct AttitudeCommand {
     ModeId active_mode = ModeId::Standby;
     std::uint8_t validity_flags = 0;
     std::uint16_t tmr_mismatch_count = 0;
+    std::uint8_t health_flags = 0;
+    std::uint8_t last_tc_opcode = 0;
+    std::uint8_t last_tc_arg0 = 0;
+    std::uint8_t health_event_count = 0;
     float gyro_bias_degph = 0.f;
     float sigma_BN_est[3] = {0.f, 0.f, 0.f};
     bool attitude_valid = false;
