@@ -1,6 +1,6 @@
 # SIL: Software-In-the-Loop
 
-I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, optionally injects a SIL-only fault, calls `FlightSoftware::step` once per packet, and sends status / estimated MRP / RW / MTB back.
+I/O adapter between the Basilisk plant and [`FlightSoftware/`](../FlightSoftware/README.md). This folder is not the GNC: it packs sensors, optionally injects a SIL-only fault, calls `FlightSoftware::step` once per packet, and sends status / estimated MRP / RW / MTB back. The CMake project here also builds `fsw_tests` (Health + director, no sockets).
 
 ## Architecture
 
@@ -60,13 +60,13 @@ Payload (12 bytes) + `crc32` (4 bytes):
 |---|---|---|
 | `RWTorqueCommand` | `torque_Nm[3]` | N·m body X/Y/Z |
 | `MTBDipoleCommand` | `dipole_Am2[3]` | A·m² body X/Y/Z |
-| `FswStatusCommand` | `mode`, `flags`, `tmr_mismatch_count`, `gyro_bias_degph` | `ModeId` 0–3; flags: css=1, nadir=2, att=4, triad=8, tmr_mismatch=16, tmr_no_majority=32, **mode_forced=64** |
+| `FswStatusCommand` | `mode`, `flags`, `tmr_mismatch_count`, `gyro_bias_degph`, `health_flags`, `last_tc_opcode`, `last_tc_arg0`, `health_event_count` | `ModeId` 0–3. **flags:** css=1, nadir=2, att=4, triad=8, tmr_mismatch=16, tmr_no_majority=32, **mode_forced=64**. **health_flags:** dt_back=1, dt_skip=2, gyro_oor=4, mag_oor=8, css_range=16, css_incoh=32, att_stale=64. **last_tc_***: ACK of the last opcode that reached `applyTelecommand` (`TC_INJECT_FAULT` is SIL-only and is not ACKed). Packet still 32 B (former `pad[4]`). |
 | `BootConfigCommand` | `boot_standby_s` + 8 B pad | Plant → FSW, once after connect. Hold Standby until this sim time (0 = off) |
 | `FswAttitudeCommand` | `sigma_BN[3]` | Estimated MRP from filtered `C_BN` (zeros if attitude invalid) |
 | `TelecommandPacket` | `opcode`, `arg0`, `arg1` | Operator uplink on **:5558** only (`TelecommandOpcode` 0–9) |
 
 `crc32` covers every byte of the packet **except** the last 4 (same algorithm as `crc32.h`).
-The C++ loop sends status and estimated MRP **every** cycle, then RW/MTB if the command flags are set. The Python bridge does **not** print RW/MTB torques. Every 5 s of sim time it prints one `SIL TM` line: mode, geodesic **Att** (FSW MRP vs plant `sc.sigma_BN`), `|b|`, TMR count, validity flags, SOC. Mode changes still print immediately (`SIL FSW mode=`).
+The C++ loop sends status and estimated MRP **every** cycle, then RW/MTB if the command flags are set. The Python bridge does **not** print RW/MTB torques. Every 5 s of sim time it prints one `SIL TM` line: mode, geodesic **Att** (FSW MRP vs plant `sc.sigma_BN`), `|b|`, TMR count, validity flags, SOC, **health=**, **ack=**, **nH=**. Mode changes still print immediately (`SIL FSW mode=`). After `force 2` on `:5558`, expect `ack=1,2` on the next TM line.
 
 ## Fault injection (SIL only)
 
@@ -118,7 +118,10 @@ Expected on the C++ console after the next sensor cycle: `TC recv opcode=…` th
 ```powershell
 cmake -S SIL/cpp -B SIL/cpp/build
 cmake --build SIL/cpp/build --config Release
+ctest --test-dir SIL/cpp/build -C Release --output-on-failure
 ```
+
+`fsw_tests` does not need sockets or Basilisk. Visual Studio is multi-config: pass `-C Release` (or `Debug`) to `ctest`.
 
 ## Startup order
 

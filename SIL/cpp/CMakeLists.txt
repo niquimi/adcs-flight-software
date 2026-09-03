@@ -5,15 +5,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(FSW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../FlightSoftware")
+set(TESTS_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../tests")
 
-add_executable(
-    sensor_receiver
-    sil_connection.cpp
-    sensor_receiver.cpp
-    command_sender.cpp
-    fault_injector.cpp
-    boot_config_receiver.cpp
-    telecommand_link.cpp
+set(FSW_SOURCES
     ${FSW_ROOT}/flight_software.cpp
     ${FSW_ROOT}/mode_director.cpp
     ${FSW_ROOT}/eps/eps_manager.cpp
@@ -34,6 +28,18 @@ add_executable(
     ${FSW_ROOT}/actuators/rw_mapper.cpp
     ${FSW_ROOT}/pointing/sun_reference.cpp
     ${FSW_ROOT}/pointing/nadir_reference.cpp
+    ${FSW_ROOT}/health/health_monitor.cpp
+)
+
+add_executable(
+    sensor_receiver
+    sil_connection.cpp
+    sensor_receiver.cpp
+    command_sender.cpp
+    fault_injector.cpp
+    boot_config_receiver.cpp
+    telecommand_link.cpp
+    ${FSW_SOURCES}
 )
 
 target_include_directories(
@@ -53,3 +59,21 @@ target_compile_definitions(sensor_receiver PRIVATE ADCS_ENABLE_FAULT_INJECTION)
 if(WIN32)
     target_link_libraries(sensor_receiver PRIVATE ws2_32)
 endif()
+
+enable_testing()
+
+add_executable(fsw_tests ${TESTS_ROOT}/fsw_tests.cpp ${FSW_SOURCES})
+
+target_include_directories(
+    fsw_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${FSW_ROOT}
+        ${FSW_ROOT}/modes
+        ${FSW_ROOT}/estimation
+        ${FSW_ROOT}/control
+        ${FSW_ROOT}/actuators
+        ${FSW_ROOT}/pointing
+)
+
+add_test(NAME fsw_tests COMMAND fsw_tests)

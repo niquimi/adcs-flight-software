@@ -81,9 +81,11 @@ Default `basic_orbit_vizard.py` starts in SIL:
 
 The Python bridge uses **one socket** at `127.0.0.1:5557`: it sends 56-byte sensor
 frames and receives 32-byte commands (status, estimated MRP, RW, MTB). Every 5 s
-of sim time it prints `SIL TM` (mode, Att vs plant truth, `|b|`, TMR, flags, SOC).
-RW/MTB torques are applied but not printed. Operator TCs are **not** on this
-socket; use `:5558` and [`SIL/tc_terminal.py`](../SIL/tc_terminal.py).
+of sim time it prints `SIL TM` (mode, Att vs plant truth, `|b|`, TMR, flags, SOC,
+Health bits, last-TC ACK). RW/MTB torques are applied but not printed. Operator
+TCs are **not** on this socket; use `:5558` and [`SIL/tc_terminal.py`](../SIL/tc_terminal.py).
+A `force 2` should show `ack=1,2` on the next TM line. Health FDIR itself is
+onboard (C++ `ctest`); these scenarios do not inject a wild gyro.
 
 Ports: `5556` Vizard, `5557` SIL plant, `5558` telecommands.
 
@@ -110,7 +112,7 @@ FSW thresholds (for reading console `Mode=`): Detumble enter `‖ω‖ > 0.015` 
 .\.venv\Scripts\python.exe .\BasiliskSim\scenarios\detumble_to_pointing.py
 ```
 
-Replace the script name for other cases. Observe mode transitions on the C++ console, Vizard GenericStorage, and SOC bar — no automated mode assertions yet.
+Replace the script name for other cases. Observe mode transitions on the C++ console, Vizard GenericStorage, and SOC bar. Onboard Health/FDIR unit tests are C++ (`ctest` in [SIL](../SIL/README.md#build)), not assertions in these scripts.
 
 ## What the scenario does
 
