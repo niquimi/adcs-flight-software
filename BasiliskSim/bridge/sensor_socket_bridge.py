@@ -113,14 +113,14 @@ class SensorSocketBridge(sysModel.SysModel):
         except OSError as exc:
             self._close_socket()
             raise ConnectionError(
-                f"Could not connect to SIL server at {self.host}:{self.port}. "
+                f"Could not connect to SIL server on port {self.port}. "
                 "Start the C++ sensor_receiver first "
                 f"(.\\SIL\\cpp\\build\\Release\\sensor_receiver.exe)."
             ) from exc
         self.sock.sendall(pack_boot_config(self.boot_standby_s))
         self.sock.setblocking(False)
         print(
-            f"SIL bridge connected to {self.host}:{self.port} "
+            f"SIL bridge connected on port {self.port} "
             "(bidirectional: telemetry out, commands in)"
             + (
                 f", boot Standby {self.boot_standby_s:.0f} s"

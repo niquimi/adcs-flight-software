@@ -45,7 +45,7 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
 
     SpacecraftState state = state_estimator_.update(sensors, fdir.gate);
     health_.noteAttitude(state.attitude_valid);
-    health_.report().flags();
+    health_.noteCss(state.css_valid);
     fdir.force_safe = fdir.force_safe || health_.report().att_stale;
 
     if (bootStandbyDuration_s_ > 0.f && !bootHoldLogged_
@@ -112,6 +112,9 @@ AttitudeCommand FlightSoftware::step(const SensorPacket& sensors) {
 bool FlightSoftware::referenceValid(const SpacecraftState& state) const {
     switch (pointing_.target()) {
         case PointingTarget::Sun:
+            if (active_->id() == ModeId::Pointing) {
+                return !health_.report().css_stale;
+            }
             return state.css_valid;
         case PointingTarget::Nadir:
             return state.nadir_valid;

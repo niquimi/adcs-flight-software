@@ -97,6 +97,32 @@ void test_health_gyro_oor() {
     CHECK(fr.gate.use_css);
 }
 
+void test_health_css_noise_not_range() {
+    HealthMonitor health;
+    SensorPacket p = sane(1.0f);
+    p.css_mx = -0.03f;
+    const HealthReport r = health.evaluateSensors(p);
+    CHECK(!r.css_range);
+    CHECK((r.flags() & 0x10) == 0);
+
+    p.css_mx = -1.0f;
+    const HealthReport r2 = health.evaluateSensors(p);
+    CHECK(r2.css_range);
+}
+
+void test_health_css_stale_dwell() {
+    HealthMonitor health;
+    for (int i = 0; i < HealthMonitor::kCssInvalidN - 1; ++i) {
+        health.noteCss(false);
+        CHECK(!health.report().css_stale);
+    }
+    health.noteCss(false);
+    CHECK(health.report().css_stale);
+    CHECK((health.report().flags() & 0x80) != 0);
+    health.noteCss(true);
+    CHECK(!health.report().css_stale);
+}
+
 void test_fsw_gyro_oor_not_pointing() {
     FlightSoftware fsw;
     fsw.setBootStandbyDuration(0.f);
@@ -119,6 +145,8 @@ int main() {
     test_health_dt_back();
     test_health_dt_skip();
     test_health_gyro_oor();
+    test_health_css_noise_not_range();
+    test_health_css_stale_dwell();
     test_fsw_gyro_oor_not_pointing();
 
     if (g_fails != 0) {

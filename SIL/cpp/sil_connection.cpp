@@ -137,7 +137,7 @@ int main() {
         return 1;
     }
 
-    std::cout << "SIL listening on 127.0.0.1:" << kDefaultSilPort << "\n";
+    std::cout << "SIL listening on port " << kDefaultSilPort << "\n";
     std::cout << "Waiting for Basilisk bridge connection...\n";
 
     const socket_t clientSocket = accept(serverSocket, nullptr, nullptr);

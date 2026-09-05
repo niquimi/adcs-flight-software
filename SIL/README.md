@@ -60,7 +60,7 @@ Payload (12 bytes) + `crc32` (4 bytes):
 |---|---|---|
 | `RWTorqueCommand` | `torque_Nm[3]` | N·m body X/Y/Z |
 | `MTBDipoleCommand` | `dipole_Am2[3]` | A·m² body X/Y/Z |
-| `FswStatusCommand` | `mode`, `flags`, `tmr_mismatch_count`, `gyro_bias_degph`, `health_flags`, `last_tc_opcode`, `last_tc_arg0`, `health_event_count` | `ModeId` 0–3. **flags:** css=1, nadir=2, att=4, triad=8, tmr_mismatch=16, tmr_no_majority=32, **mode_forced=64**. **health_flags:** dt_back=1, dt_skip=2, gyro_oor=4, mag_oor=8, css_range=16, css_incoh=32, att_stale=64. **last_tc_***: ACK of the last opcode that reached `applyTelecommand` (`TC_INJECT_FAULT` is SIL-only and is not ACKed). Packet still 32 B (former `pad[4]`). |
+| `FswStatusCommand` | `mode`, `flags`, `tmr_mismatch_count`, `gyro_bias_degph`, `health_flags`, `last_tc_opcode`, `last_tc_arg0`, `health_event_count` | `ModeId` 0–3. **flags:** css=1, nadir=2, att=4, triad=8, tmr_mismatch=16, tmr_no_majority=32, **mode_forced=64**. **health_flags:** dt_back=1, dt_skip=2, gyro_oor=4, mag_oor=8, css_range=16, css_incoh=32, att_stale=64, css_stale=128. **last_tc_***: ACK of the last opcode that reached `applyTelecommand` (`TC_INJECT_FAULT` is SIL-only and is not ACKed). Packet still 32 B (former `pad[4]`). |
 | `BootConfigCommand` | `boot_standby_s` + 8 B pad | Plant → FSW, once after connect. Hold Standby until this sim time (0 = off) |
 | `FswAttitudeCommand` | `sigma_BN[3]` | Estimated MRP from filtered `C_BN` (zeros if attitude invalid) |
 | `TelecommandPacket` | `opcode`, `arg0`, `arg1` | Operator uplink on **:5558** only (`TelecommandOpcode` 0–9) |

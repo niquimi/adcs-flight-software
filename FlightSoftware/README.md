@@ -55,7 +55,7 @@ While `t < bootStandbyDuration_s`, the director stays in Standby (no Detumble, P
 | Pointing | 2-axis PD on sun or nadir error | Default target: nadir (`−Z` to Earth) |
 | Safe | Same sun error as Pointing-sun (`SunReference`) | Energy supervisor; +Z panels |
 
-`ref_ok` is `nadir_valid` or `css_valid` according to the pointing target. In eclipse, nadir can stay valid (filter coasts); sun-pointing does not.
+`ref_ok` is `nadir_valid` or `css_valid` according to the pointing target. While already in Pointing-sun, `css_valid` may drop for up to 50 cycles (`css_stale`) before the director leaves for Standby — a one-cycle CSS glitch during a sun slew does not dump into Detumble. In eclipse, nadir can stay valid (filter coasts); sun-pointing does not.
 
 ## EPS and FDIR
 
@@ -71,9 +71,10 @@ FDIR stores `ModeId` and the director flags in `Tmr<T>` (three replicas, majorit
 | `dt > 1 s` | gyro | no | `0x02` |
 | `\|ω_i\| > 2 rad/s` | gyro | yes | `0x04` |
 | `\|B\|` outside `[5e3, 1e5]` nT | mag | no | `0x08` |
-| CSS outside `[0, 2.5]` | CSS | no | `0x10` |
+| CSS outside `[-0.06, 2.5]` | CSS | no | `0x10` |
 | Opposite CSS faces both `> 0.2` | CSS | no | `0x20` |
 | `attitude_valid` false 50 cycles | — | yes | `0x40` |
+| `css_valid` false 50 cycles | — | no | `0x80` |
 
 `dt` is `SensorPacket.timestamp_s`, not wall-clock of `step()`. The status packet also echoes the last operator TC (`last_tc_opcode`, `last_tc_arg0`) until the next one.
 

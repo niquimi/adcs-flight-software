@@ -90,7 +90,7 @@ bool TelecommandLink::listen(std::uint16_t port) {
         return false;
     }
 
-    std::cout << "TC console listening on 127.0.0.1:" << port << "\n";
+    std::cout << "TC console listening on port " << port << "\n";
     return true;
 }
 

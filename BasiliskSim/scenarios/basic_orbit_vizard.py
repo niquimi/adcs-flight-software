@@ -45,7 +45,7 @@ VIZARD_FRAMES_PER_SECOND = 60
 SIM_RATE_SECONDS = 1.0 / VIZARD_FRAMES_PER_SECOND
 SIM_DURATION_MINUTES = 120.0
 # Wall clock: sim_time / accel. Eclipse ~t=650 s → ~65 s wall at 10x (was ~5 min at 2x).
-STREAM_ACCELERATION_FACTOR = 1.0
+STREAM_ACCELERATION_FACTOR = 2.0
 # Known body-frame gyro bias for AttitudeFilter SIL. 0.01 °/s = 36 °/h.
 # Unestimated → ~21° walk in a 35 min eclipse; ki should lock |b| to ~36 °/h in sun.
 IMU_GYRO_BIAS_DEGPS = [0.01, 0.0, 0.0]

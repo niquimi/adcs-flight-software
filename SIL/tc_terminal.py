@@ -98,13 +98,13 @@ def main() -> None:
         sock.connect((args.host, args.port))
     except OSError as exc:
         print(
-            f"Could not connect to TC port {args.host}:{args.port}: {exc}\n"
-            "Start sensor_receiver.exe first (it listens on :5558).",
+            f"Could not connect to TC port {args.port}.\n"
+            "Start sensor_receiver.exe first (it listens on that port).",
             file=sys.stderr,
         )
         raise SystemExit(1) from exc
 
-    print(f"Connected to TC {args.host}:{args.port}. Type 'help' or 'quit'.")
+    print(f"Connected to TC port {args.port}. Type 'help' or 'quit'.")
     seq = 0
     try:
         while True:

@@ -4,6 +4,7 @@ void HealthMonitor::reset() {
     last_t_s_ = 0.f;
     has_t_ = false;
     att_invalid_streak_ = 0;
+    css_invalid_streak_ = 0;
     report_ = HealthReport{};
 }
 
@@ -18,6 +19,15 @@ void HealthMonitor::noteAttitude(bool attitude_valid) {
         ++att_invalid_streak_;
     }
     report_.att_stale = (att_invalid_streak_ >= kAttInvalidN);
+}
+
+void HealthMonitor::noteCss(bool css_valid) {
+    if (css_valid) {
+        css_invalid_streak_ = 0;
+    } else if (css_invalid_streak_ < kCssInvalidN) {
+        ++css_invalid_streak_;
+    }
+    report_.css_stale = (css_invalid_streak_ >= kCssInvalidN);
 }
 
 HealthReport HealthMonitor::evaluateSensors(const SensorPacket& sensors) {
